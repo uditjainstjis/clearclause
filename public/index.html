@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ClearClause — understand a contract before you sign it</title>
+    <meta
+      name="description"
+      content="Paste a rental agreement, job offer or loan document and get a plain-English explanation of every clause, what it obliges you to do, and what to ask before you sign."
+    />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="preload" href="/fonts/fraunces.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/inter.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="/styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23161310'/%3E%3Cpath d='M8 10h16M8 16h16M8 22h9' stroke='%23e8a33d' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to main content</a>
+
+    <header class="masthead">
+      <div class="masthead__inner">
+        <div class="brand">
+          <span class="brand__mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" width="28" height="28" focusable="false">
+              <rect width="32" height="32" rx="7" fill="currentColor" />
+              <path
+                d="M8 10h16M8 16h16M8 22h9"
+                stroke="var(--surface-1)"
+                stroke-width="2.6"
+                stroke-linecap="round"
+              />
+            </svg>
+          </span>
+          <span class="brand__text">
+            <span class="brand__name">ClearClause</span>
+            <span class="brand__tag">Know before you sign</span>
+          </span>
+        </div>
+        <button type="button" id="theme-toggle" class="btn btn--ghost" aria-pressed="false">
+          <span class="theme-toggle__label">Dark mode</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- A landmark, so the standing disclaimer is reachable by landmark
+         navigation and is not orphaned outside the page regions. -->
+    <aside class="notice-wrap" aria-label="Important notice about this service">
+      <p class="notice notice--standing" role="note">
+        <strong>This is information, not legal advice.</strong> ClearClause explains what your
+        document says. It does not tell you what the law is, whether a clause is enforceable, or
+        what you should do. For a decision that matters, speak to a lawyer.
+      </p>
+    </aside>
+
+    <main id="main" class="wrap">
+      <section class="panel" aria-labelledby="compose-h">
+        <h1 id="compose-h" class="display">Read the contract you were <em>actually</em> given.</h1>
+        <p class="lede">
+          Paste an agreement below. Every clause comes back in plain English, marked by how much
+          attention it needs, with the exact words from your document that say so.
+        </p>
+
+        <form id="analyze-form" novalidate>
+          <div class="field">
+            <label for="doc-text" class="field__label">Your document</label>
+            <p id="doc-help" class="field__help">
+              Paste the text, or drop in a <code>.txt</code> file. Nothing is stored — the document
+              is analysed in memory and discarded when the response ends.
+            </p>
+            <textarea
+              id="doc-text"
+              name="text"
+              rows="12"
+              spellcheck="false"
+              aria-describedby="doc-help doc-count"
+              placeholder="14. LOCK-IN PERIOD: The Lessee shall not vacate the demised premises before expiry of eleven (11) months…"
+            ></textarea>
+            <div class="field__foot">
+              <p id="doc-count" class="counter tabular" aria-live="off">0 characters</p>
+              <label class="file-btn">
+                <input type="file" id="doc-file" accept=".txt,text/plain" />
+                <span>Upload a .txt file</span>
+              </label>
+            </div>
+          </div>
+
+          <fieldset class="samples">
+            <legend>Or try one of these</legend>
+            <div class="samples__row">
+              <button type="button" class="chip" data-sample="rental">Rental agreement</button>
+              <button type="button" class="chip" data-sample="offer">Job offer letter</button>
+              <button type="button" class="chip chip--alert" data-sample="tampered">
+                Contract with hidden AI instructions
+              </button>
+            </div>
+          </fieldset>
+
+          <div class="actions">
+            <div class="field field--inline">
+              <label for="doc-type" class="field__label">Document type</label>
+              <select id="doc-type" name="docType">
+                <option value="">Detect automatically</option>
+                <option value="rental">Rental / lease</option>
+                <option value="employment">Employment / offer</option>
+                <option value="loan">Loan / credit</option>
+                <option value="service">Service agreement</option>
+                <option value="nda">NDA / confidentiality</option>
+                <option value="terms">Terms of service</option>
+              </select>
+            </div>
+            <button type="submit" id="analyze-btn" class="btn btn--primary">
+              Analyse document
+            </button>
+          </div>
+
+          <p id="form-error" class="notice notice--error" role="alert" hidden></p>
+        </form>
+      </section>
+
+      <!-- Progress is announced; individual clauses are not, to avoid flooding
+           a screen reader with twenty separate announcements. -->
+      <p id="progress" class="visually-hidden" role="status" aria-live="polite"></p>
+
+      <section id="results" class="results" aria-labelledby="results-h" hidden>
+        <h2 id="results-h" class="visually-hidden">Analysis</h2>
+
+        <div id="guard-alert" class="notice notice--alert" role="alert" hidden></div>
+
+        <div class="summary" id="summary">
+          <div class="score">
+            <p class="score__label" id="score-label">Needs your attention</p>
+            <p class="score__value tabular" id="score-value" aria-describedby="score-label">—</p>
+            <p class="score__scale" id="score-word">Analysing…</p>
+          </div>
+          <dl class="summary__stats">
+            <div>
+              <dt>Document type</dt>
+              <dd id="stat-type">—</dd>
+            </div>
+            <div>
+              <dt>Clauses read</dt>
+              <dd class="tabular" id="stat-clauses">—</dd>
+            </div>
+            <div>
+              <dt>High attention</dt>
+              <dd class="tabular" id="stat-high">—</dd>
+            </div>
+            <div>
+              <dt>Analysed in</dt>
+              <dd class="tabular" id="stat-time">—</dd>
+            </div>
+          </dl>
+          <p class="summary__efficiency tabular" id="stat-cache"></p>
+        </div>
+
+        <nav class="readfirst" id="readfirst" aria-labelledby="readfirst-h" hidden>
+          <h3 id="readfirst-h">Read these first</h3>
+          <ol id="readfirst-list"></ol>
+        </nav>
+
+        <div class="columns">
+          <div class="column column--main">
+            <h3 class="column__head" id="clauses-h">Every clause, in plain English</h3>
+            <ol class="clauses" id="clause-list" aria-labelledby="clauses-h"></ol>
+          </div>
+
+          <aside class="column column--side" aria-labelledby="side-h">
+            <h3 class="visually-hidden" id="side-h">Summary sheets</h3>
+
+            <section class="card" aria-labelledby="obligations-h" id="obligations-card" hidden>
+              <h4 id="obligations-h">What you would be agreeing to do</h4>
+              <ul class="checklist" id="obligations-list"></ul>
+            </section>
+
+            <section class="card" aria-labelledby="questions-h" id="questions-card" hidden>
+              <h4 id="questions-h">Questions worth asking first</h4>
+              <ol class="questions" id="questions-list"></ol>
+              <button type="button" class="btn btn--ghost btn--block" id="copy-btn">
+                Copy the full summary
+              </button>
+              <p class="copy-status" id="copy-status" role="status" aria-live="polite"></p>
+            </section>
+          </aside>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer__inner">
+        <p>
+          <strong>ClearClause</strong> — built for PromptWars, on the theme
+          <em>AI for Legal Assistance &amp; Access</em>.
+        </p>
+        <p>
+          Your document is never written to disk or to a database. Direct identifiers are stripped
+          before any text reaches a model, and every judgement is checked against the words actually
+          in your document.
+        </p>
+        <p>
+          <a href="https://github.com/uditjainstjis/clearclause">Source code</a>
+        </p>
+      </div>
+    </footer>
+
+    <template id="clause-tpl">
+      <li class="clause" tabindex="-1">
+        <div class="clause__head">
+          <span class="badge">
+            <span class="badge__glyph" aria-hidden="true"></span>
+            <span class="badge__text"></span>
+          </span>
+          <h4 class="clause__title"></h4>
+          <span class="clause__label tabular"></span>
+        </div>
+        <p class="clause__plain"></p>
+        <blockquote class="clause__quote"><p></p></blockquote>
+        <p class="clause__why"></p>
+        <p class="clause__ask"><span class="clause__ask-label">Ask:</span> <span></span></p>
+        <p class="clause__ungrounded" hidden>
+          Shown for completeness only: this explanation could not be matched to exact wording in
+          your document, so it does not count towards the score above.
+        </p>
+      </li>
+    </template>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
