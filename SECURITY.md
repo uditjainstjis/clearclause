@@ -120,8 +120,21 @@ first-party files; there are no third-party origins to allow.
 
 ## Dependencies
 
-One runtime dependency: `hono`. `npm audit --audit-level=high` runs in CI and
-fails the build on a high or critical advisory.
+One runtime dependency: `hono`. CI runs
+`npm audit --audit-level=high --omit=dev` and **fails the build** on a high or
+critical advisory in the tree that is actually deployed.
+
+The build toolchain is audited too, but only reported. At the time of writing it
+carries one high advisory: `sharp`, pulled in transitively by `wrangler` through
+`miniflare`, bundles a `libheif` with [GHSA-rgj7-g3m4-5g8c][sharp]. The fix is a
+major downgrade of `@cloudflare/vitest-pool-workers` that would take the test
+suite out of `workerd`. It is not gated because the reachable attack surface is
+a developer choosing to decode a hostile HEIC image locally; none of it is
+served, and a build-tool advisory must never be able to block a security fix
+from reaching production. The distinction is deliberate: gate what ships, report
+what builds.
+
+[sharp]: https://github.com/advisories/GHSA-rgj7-g3m4-5g8c
 
 ## What is deliberately not defended
 

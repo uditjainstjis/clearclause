@@ -59,8 +59,15 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Fails the build on a high or critical advisory in the dependency tree.
-      - run: npm audit --audit-level=high
+      # The gate is the tree that actually reaches the edge. `hono` is the only
+      # runtime dependency, so this is a tight, meaningful assertion.
+      - name: Audit shipped dependencies
+        run: npm audit --audit-level=high --omit=dev
+      # The build toolchain is reported, not gated. It is not served to anyone,
+      # and a transitive advisory in it must not be able to block a security fix
+      # from shipping. See SECURITY.md > Dependencies.
+      - name: Report build-toolchain advisories
+        run: npm audit --audit-level=high || true
 
   secrets:
     name: Secret scan

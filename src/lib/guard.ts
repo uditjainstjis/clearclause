@@ -11,8 +11,9 @@ import type { InjectionFinding } from './types';
  * document. So findings are neutralised *and surfaced to the user*, never
  * silently dropped.
  *
- * This module is pure and synchronous: it is the layer that must keep working
- * when the model-based screen (llama-guard) is unavailable. See SECURITY.md.
+ * This module is pure and synchronous, and it is the only injection control in
+ * the system. That is deliberate: a screen implemented by a model is a screen
+ * that can itself be argued with. See SECURITY.md.
  */
 
 interface Rule {

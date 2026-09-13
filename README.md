@@ -109,11 +109,10 @@ then screened, then stripped, and only then does any of it reach a model.
 Everything runs on **Cloudflare Workers AI**, reached through a **binding** —
 there is no API key in this repository, in CI, or in the deployed bundle.
 
-| Model                                      | Where                                                                   | Why                                                                        |
-| ------------------------------------------ | ----------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `@cf/meta/llama-4-scout-17b-16e-instruct`  | Primary clause analysis, document-type classification — `src/lib/ai.ts` | Fastest of the candidates and the best calibrated                          |
-| `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | Fallback when the primary is unavailable or returns unusable JSON       | Independent family, comparable latency                                     |
-| `@cf/meta/llama-guard-3-8b`                | Advisory safety screen — `safetyScreen()`                               | Hosted classifier; the deterministic screen remains the control we rely on |
+| Model                                      | Where                                                                   | Why                                               |
+| ------------------------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------- |
+| `@cf/meta/llama-4-scout-17b-16e-instruct`  | Primary clause analysis, document-type classification — `src/lib/ai.ts` | Fastest of the candidates and the best calibrated |
+| `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | Fallback when the primary is unavailable or returns unusable JSON       | Independent family, comparable latency            |
 
 ### Model selection was measured, not assumed
 

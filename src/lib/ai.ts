@@ -23,7 +23,6 @@ import type { Clause, ClauseAnalysis, DocType, Obligation, RiskLevel } from './t
 
 export const PRIMARY_MODEL = '@cf/meta/llama-4-scout-17b-16e-instruct';
 export const FALLBACK_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-export const SAFETY_MODEL = '@cf/meta/llama-guard-3-8b';
 
 /** Bindings this Worker requires. `AI` is the only external dependency. */
 export interface Env {
@@ -200,28 +199,6 @@ export async function analyzeClause(
     usedFallback: true,
     fromCache: false,
   };
-}
-
-/**
- * Screen text with Llama Guard, Cloudflare's hosted safety classifier.
- *
- * Advisory only: a failure here never blocks analysis, because the
- * deterministic screen in guard.ts is the control we actually rely on.
- *
- * @returns true when the classifier flags the content as unsafe
- */
-export async function safetyScreen(env: Env, text: string): Promise<boolean> {
-  try {
-    const res = (await env.AI.run(
-      SAFETY_MODEL as Parameters<Ai['run']>[0],
-      {
-        messages: [{ role: 'user', content: text.slice(0, 4000) }],
-      } as never,
-    )) as { response?: unknown };
-    return typeof res.response === 'string' && /\bunsafe\b/i.test(res.response);
-  } catch {
-    return false;
-  }
 }
 
 const DOC_TYPES: readonly DocType[] = [
