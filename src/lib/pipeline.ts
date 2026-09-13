@@ -151,6 +151,7 @@ export async function* analyzeDocument(
     modelCalls: 0,
     fallbackCalls: 0,
     elapsedMs: 0,
+    concurrency: CONCURRENCY,
   };
 
   for await (const result of mapConcurrent(clauses, CONCURRENCY, (clause) =>

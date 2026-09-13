@@ -134,5 +134,7 @@ describe('analyzeDocument', () => {
     const { stats } = events.at(-1) as Extract<AnalyzeEvent, { type: 'report' }>;
     expect(stats.cacheHits + stats.modelCalls).toBe(stats.clauses);
     expect(stats.elapsedMs).toBeGreaterThanOrEqual(0);
+    // Reported so the interface never restates a server constant.
+    expect(stats.concurrency).toBeGreaterThan(0);
   });
 });

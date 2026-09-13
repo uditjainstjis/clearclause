@@ -103,4 +103,7 @@ export interface RunStats {
   modelCalls: number;
   fallbackCalls: number;
   elapsedMs: number;
+  /** How many model calls ran at once. Reported so the interface never has to
+   *  restate a server-side constant — the cause of a previous copy bug. */
+  concurrency: number;
 }

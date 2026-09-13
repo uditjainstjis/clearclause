@@ -238,7 +238,7 @@ function renderReport(report, stats) {
       `${stats.cacheHits} of ${stats.clauses} clauses were already analysed and came from cache, so only ${stats.modelCalls} needed a model call.`,
     );
   } else {
-    parts.push(`${stats.modelCalls} model calls, run six at a time.`);
+    parts.push(`${stats.modelCalls} model calls, run ${stats.concurrency} at a time.`);
   }
   if (report.ungroundedCount > 0) {
     parts.push(
