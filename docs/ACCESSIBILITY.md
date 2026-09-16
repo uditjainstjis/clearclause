@@ -42,16 +42,31 @@ This matters more here than in most interfaces: the entire product is a risk
 signal, and a red/green-only encoding would hand a wrong answer to roughly one
 in twelve men.
 
-### Progress is announced once, results are not
+### Announcements are rationed, not merely centralised
 
 Results stream in one clause at a time. The obvious implementation — `aria-live`
-on the clause list — would fire twenty separate announcements at a screen-reader
+on the clause list — would fire one announcement per clause at a screen-reader
 user and make the page unusable while it loaded.
 
-Instead a single visually-hidden `role="status"` region announces progress
-("Analysed 7 of 15 clauses"), and the clause list is ordinary content the user
-navigates when they choose. The final announcement states the high-attention
-count and hands over.
+Moving that into a single region is only half the fix, and for a while this
+project had only that half: one visually-hidden `role="status"` region, updated
+once per clause, which is the same eighty announcements arriving through a
+tidier pipe. A region is not a rate limit.
+
+Progress is now announced at quartiles — "Analysed 7 of 15 clauses" — plus a
+final message that states the high-attention count and hands over. The clause
+list itself is ordinary content the user navigates when they choose.
+
+### The theme toggle carries its state in one place
+
+A toggle that flips both its visible label and its `aria-pressed` state
+double-encodes, and the two readings contradict each other: with dark mode on, a
+button labelled "Light mode" and marked `aria-pressed="true"` announces "Light
+mode, pressed" — which a screen-reader user can only take to mean light mode is
+active. It is not.
+
+The label is fixed at "Dark mode" and names what the button _does_.
+`aria-pressed` alone carries what is currently _true_. WCAG 4.1.2.
 
 ### Errors interrupt, progress does not
 

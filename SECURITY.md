@@ -11,14 +11,34 @@ do not include a real contract in a public report.
 
 ## What the service holds
 
-**Nothing.** There is no database, no object store, no log of document text, and
-no user account. A document exists in memory for the life of one request and is
-gone when the response ends.
+**No document.** There is no database, no object store, no log of document text,
+and no user account. A submitted document exists in memory for the life of one
+request and is gone when the response ends. It is never reassembled or persisted
+as a whole.
 
-The one persistent artefact is the analysis cache, which stores _model output_
-keyed by a SHA-256 of the clause text. That is a one-way function: the cache
-cannot be read back to recover a document, and a cache entry is only reachable
-by someone who already has the exact clause text.
+One thing does persist, and it is worth being exact about rather than rounding
+down to "nothing": the analysis cache. It stores the model's reply for a single
+clause — keyed by SHA-256 of that clause's text — for seven days (`TTL_SECONDS`
+in `src/lib/cache.ts`). That reply includes a `quote` field, and a quote is by
+construction a **verbatim span of the submitted clause**, after PII redaction.
+So a redacted fragment of a clause you paste can outlive your request by up to a
+week.
+
+Three properties bound what that means:
+
+- **The key is one-way.** Entries are addressed by a SHA-256 of the clause text.
+  There is no way to enumerate the cache or to walk from a key back to a
+  document; an entry is only reachable by someone who already holds the exact
+  clause text, in which case they have learned nothing.
+- **What is cached is already redacted.** PII stripping happens before any text
+  reaches a model, so identifiers never enter the cached object in the first
+  place (`src/lib/pipeline.ts` — the ordering is the control).
+- **Only grounded answers are cached.** A reply whose quote failed verification
+  is never written, so the cache cannot accumulate model inventions.
+
+The cache is per-Cloudflare-colocation and expires on its own. It is a
+performance optimisation, and the honest summary is: nothing you paste is stored
+as your document, and redacted clause-level fragments are cached for seven days.
 
 ## Threat model
 
@@ -120,19 +140,28 @@ first-party files; there are no third-party origins to allow.
 
 ## Dependencies
 
-One runtime dependency: `hono`. CI runs
-`npm audit --audit-level=high --omit=dev` and **fails the build** on a high or
-critical advisory in the tree that is actually deployed.
+One runtime dependency: `hono`. CI runs `npm audit --audit-level=high` over the
+**entire** tree — dev dependencies included — and fails the build on a high or
+critical advisory. There is no `--omit=dev` carve-out and no `|| true`: a
+security check that cannot fail is not a check.
 
-The build toolchain is audited too, but only reported. At the time of writing it
-carries one high advisory: `sharp`, pulled in transitively by `wrangler` through
-`miniflare`, bundles a `libheif` with [GHSA-rgj7-g3m4-5g8c][sharp]. The fix is a
-major downgrade of `@cloudflare/vitest-pool-workers` that would take the test
-suite out of `workerd`. It is not gated because the reachable attack surface is
-a developer choosing to decode a hostile HEIC image locally; none of it is
-served, and a build-tool advisory must never be able to block a security fix
-from reaching production. The distinction is deliberate: gate what ships, report
-what builds.
+Meeting that bar took one deliberate fix rather than a suppression. `sharp`
+bundles `libheif`, and versions below 0.35.4 carry [GHSA-rgj7-g3m4-5g8c][sharp].
+Two different `miniflare` releases sit in this tree — `wrangler` resolved the
+patched `sharp@0.35.4`, while the older `miniflare` pinned by
+`@cloudflare/vitest-pool-workers` resolved the vulnerable `0.35.2`.
+`npm audit fix` offered only a major downgrade of the test pool, which would
+have taken the suite out of `workerd` and cost more than it bought. The
+resolution is an `overrides` entry in `package.json` pinning `sharp` to `0.35.4`
+everywhere, which is a real upgrade to the patched release the rest of the tree
+was already using:
+
+```json
+"overrides": { "sharp": "0.35.4" }
+```
+
+`npm audit` now reports zero vulnerabilities at every severity, and the 176
+tests still pass in `workerd`.
 
 [sharp]: https://github.com/advisories/GHSA-rgj7-g3m4-5g8c
 

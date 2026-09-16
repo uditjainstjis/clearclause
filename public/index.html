@@ -9,8 +9,20 @@
       content="Paste a rental agreement, job offer or loan document and get a plain-English explanation of every clause, what it obliges you to do, and what to ask before you sign."
     />
     <meta name="color-scheme" content="light dark" />
-    <link rel="preload" href="/fonts/fraunces.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="/fonts/inter.woff2" as="font" type="font/woff2" crossorigin />
+    <link
+      rel="preload"
+      href="/fonts/fraunces.2c328742.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/inter.c9407645.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <link rel="stylesheet" href="/styles.css" />
     <link
       rel="icon"
@@ -64,11 +76,36 @@
         </p>
 
         <form id="analyze-form" novalidate>
+          <!-- Native radios rather than ARIA tabs: arrow-key navigation, group
+               semantics and the announced "2 of 3" all come for free, and there
+               is no keyboard handling left to get wrong. -->
+          <fieldset class="modes">
+            <legend class="field__label">What would you like to do?</legend>
+            <div class="modes__row">
+              <label class="mode">
+                <input type="radio" name="mode" value="explain" checked />
+                <span class="mode__title">Explain it</span>
+                <span class="mode__hint">Every clause in plain English</span>
+              </label>
+              <label class="mode">
+                <input type="radio" name="mode" value="ask" />
+                <span class="mode__title">Ask about it</span>
+                <span class="mode__hint">Answered only from your document</span>
+              </label>
+              <label class="mode">
+                <input type="radio" name="mode" value="compare" />
+                <span class="mode__title">Compare two versions</span>
+                <span class="mode__hint">See exactly what changed</span>
+              </label>
+            </div>
+          </fieldset>
+
           <div class="field">
             <label for="doc-text" class="field__label">Your document</label>
             <p id="doc-help" class="field__help">
-              Paste the text, or drop in a <code>.txt</code> file. Nothing is stored — the document
-              is analysed in memory and discarded when the response ends.
+              Paste the text, or drop in a <code>.txt</code> file. Your document is never saved as a
+              document — it lives in memory for one request. Explanations of individual clauses are
+              cached for seven days so a repeat reading is instant; see SECURITY.md.
             </p>
             <textarea
               id="doc-text"
@@ -85,6 +122,39 @@
                 <span>Upload a .txt file</span>
               </label>
             </div>
+          </div>
+
+          <div class="field" id="ask-field" hidden>
+            <label for="ask-question" class="field__label">Your question</label>
+            <p id="ask-help" class="field__help">
+              Answered only from the words in your document. If it does not say, you will be told
+              that rather than given a guess — and every answer carries the exact sentence it came
+              from.
+            </p>
+            <input
+              type="text"
+              id="ask-question"
+              name="question"
+              autocomplete="off"
+              aria-describedby="ask-help"
+              placeholder="How much notice do I have to give before leaving?"
+            />
+          </div>
+
+          <div class="field" id="compare-field" hidden>
+            <label for="doc-text-b" class="field__label">The other version</label>
+            <p id="compare-help" class="field__help">
+              Paste the second version here. Clauses are matched up in code, not by a model, and
+              only the ones that actually differ are explained.
+            </p>
+            <textarea
+              id="doc-text-b"
+              name="textB"
+              rows="8"
+              spellcheck="false"
+              aria-describedby="compare-help"
+              placeholder="Paste the revised draft, the renewal, or the version they sent back…"
+            ></textarea>
           </div>
 
           <fieldset class="samples">
@@ -124,10 +194,13 @@
            a screen reader with twenty separate announcements. -->
       <p id="progress" class="visually-hidden" role="status" aria-live="polite"></p>
 
+      <!-- Outside the results sections on purpose: injected-instruction findings
+           are reported by all three modes, and burying the alert inside the
+           analysis panel would hide it from the other two. -->
+      <div id="guard-alert" class="notice notice--alert" role="alert" hidden></div>
+
       <section id="results" class="results" aria-labelledby="results-h" hidden>
         <h2 id="results-h" class="visually-hidden">Analysis</h2>
-
-        <div id="guard-alert" class="notice notice--alert" role="alert" hidden></div>
 
         <div class="summary" id="summary">
           <div class="score">
@@ -186,6 +259,37 @@
           </aside>
         </div>
       </section>
+
+      <section id="answer-results" class="results" aria-labelledby="answer-h" hidden>
+        <h2 id="answer-h">What your document says</h2>
+        <div class="card answer">
+          <p id="answer-question" class="answer__question"></p>
+          <p id="answer-text" class="answer__text"></p>
+          <blockquote id="answer-quote" class="answer__quote" hidden>
+            <p id="answer-quote-text"></p>
+            <cite id="answer-quote-cite"></cite>
+          </blockquote>
+          <p id="answer-unanswered" class="notice" hidden>
+            Nothing in this document states that. A term the agreement is silent on is worth raising
+            before you sign.
+          </p>
+          <details id="answer-consulted" class="answer__consulted">
+            <summary>Which clauses were searched</summary>
+            <ul id="answer-consulted-list"></ul>
+          </details>
+          <p id="answer-stats" class="stat tabular"></p>
+        </div>
+      </section>
+
+      <section id="compare-results" class="results" aria-labelledby="compare-h" hidden>
+        <h2 id="compare-h">What changed between the two versions</h2>
+        <div class="card compare-summary">
+          <p id="compare-verdict" class="compare-verdict"></p>
+          <p id="compare-counts" class="stat tabular"></p>
+        </div>
+        <ul id="compare-list" class="diff-list"></ul>
+        <p id="compare-stats" class="stat tabular"></p>
+      </section>
     </main>
 
     <footer class="footer">
@@ -195,9 +299,10 @@
           <em>AI for Legal Assistance &amp; Access</em>.
         </p>
         <p>
-          Your document is never written to disk or to a database. Direct identifiers are stripped
-          before any text reaches a model, and every judgement is checked against the words actually
-          in your document.
+          Your document is never stored as a document, written to disk, or put in a database.
+          Explanations of individual clauses are cached for seven days. Direct identifiers are
+          stripped before any text reaches a model, and every judgement is checked against the words
+          actually in your document.
         </p>
         <p>
           <a href="https://github.com/uditjainstjis/clearclause">Source code</a>

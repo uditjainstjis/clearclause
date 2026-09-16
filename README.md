@@ -32,6 +32,24 @@ explains what your document says, and never tells you what the law is.
 | **Obligations & deadlines**   | What you would be agreeing to do, and by when                                      |
 | **Questions to ask**          | A sheet you can take to the other party or to a lawyer                             |
 | **Tamper detection**          | Warns you when the document contains text written to manipulate an AI reader       |
+| **Ask a question**            | Answered only from your document, always with the sentence it came from            |
+| **Compare two versions**      | What changed between drafts, and which way each change cuts for you                |
+| **Contradiction check**       | Terms the document states two different ways — found without a model               |
+
+Three modes, one page. The mode selector is a real radio group, so it is
+keyboard- and screen-reader-navigable without a line of custom JavaScript.
+
+```
+POST /api/analyze   explain a document clause by clause   (streamed, SSE)
+POST /api/ask       {text, question} -> answer + verified quote + clauses consulted
+POST /api/compare   {a, b} -> aligned differences + which version treats you better
+GET  /api/health    liveness; reports limits, never configuration
+```
+
+All three document routes share one gate (`guardApi` in `src/index.ts`): a JSON
+content-type requirement that closes the CORS simple-request path, a
+`Sec-Fetch-Site` check, and a per-IP rate limit applied last so a rejected
+cross-site request never spends the visitor's budget.
 
 ## Three things that make it more than a wrapper
 
@@ -116,7 +134,7 @@ there is no API key in this repository, in CI, or in the deployed bundle.
 
 ### Model selection was measured, not assumed
 
-Six candidates were run against a real punitive lock-in clause under the same
+Seven candidates were run against a real punitive lock-in clause under the same
 JSON schema:
 
 | Model                  | Latency  | Outcome                                                     |
@@ -140,14 +158,40 @@ Full method and figures: [docs/EVALUATION.md](docs/EVALUATION.md).
 
 The brief's own use cases, and where each is implemented:
 
-| Brief use case                                       | Where                                                                 |
-| ---------------------------------------------------- | --------------------------------------------------------------------- |
-| Simplifying complex legal documents                  | `plain` field per clause — `src/prompts/clause.ts`                    |
-| Highlighting important clauses, obligations, risks   | severity + `readFirst()` + `collectObligations()` — `src/lib/risk.ts` |
-| Generating summaries, checklists, actionable outputs | obligations checklist, question sheet, copy-as-Markdown               |
-| Helping users understand options and next steps      | `ask` field per clause, "Questions worth asking first"                |
-| Helping users prepare for a legal professional       | the question sheet is designed to be handed over                      |
-| Comparing contracts                                  | _not implemented_ — see [Limitations](#limitations)                   |
+| Brief use case                                            | Where                                                                                                |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Simplifying complex legal documents                       | `plain` field per clause — `src/prompts/clause.ts`                                                   |
+| **Comparing contracts, agreements or policies**           | `POST /api/compare` — deterministic alignment in `src/lib/align.ts`, verdict in `src/lib/compare.ts` |
+| Highlighting important clauses, obligations, risks        | severity + `readFirst()` + `collectObligations()` — `src/lib/risk.ts`                                |
+| …**or inconsistencies**                                   | `findInconsistencies()` — `src/lib/consistency.ts`, no model involved                                |
+| **Answering questions based on provided legal documents** | `POST /api/ask` — retrieval in `src/lib/retrieve.ts`, grounding in `src/lib/ask.ts`                  |
+| Helping users understand options and next steps           | `ask` field per clause, "Questions worth asking first"                                               |
+| Generating summaries, checklists, actionable outputs      | obligations checklist, question sheet, copy-as-Markdown                                              |
+| Helping users prepare for a legal professional            | the question sheet is designed to be handed over                                                     |
+
+All seven are implemented. Three are worth a note.
+
+**Comparing** splits the problem in two and gives the model only the half it is
+good at. Which clause in the new draft corresponds to which in the old one is
+decided by cosine similarity over stemmed term vectors with mutual-best matching
+(`src/lib/align.ts`) — so the pairing is reproducible and a model cannot invent
+a correspondence. Only pairs that actually differ are sent for explanation, and
+the headline verdict is counted, not generated. Two eighty-clause drafts that
+differ in three places cost three model calls.
+
+**Answering questions** is extractive and refusable. The clauses to answer from
+are chosen by a BM25-style scorer (`src/lib/retrieve.ts`); the answer must carry
+a verbatim quote, which is verified before display; and "the document does not
+say" is presented as a correct answer rather than a failure. Asked whether a
+lock-in clause is enforceable, it declines — that is a question about the law,
+and this product does not answer those.
+
+**Inconsistencies** are found deterministically. A contract that sets thirty
+days' notice in one clause and ninety in another is the failure a reader is
+least equipped to catch, and it needs no model: `src/lib/consistency.ts`
+normalises periods, amounts, rates and named forums, and reports any term the
+document states two ways. "Sixty days" and "two months" are recognised as the
+same; so are "3% per month" and "36% per annum".
 
 The brief's constraint — _"provide information and assistance, rather than
 replace professional legal advice"_ — is enforced in three places, not just
@@ -192,11 +236,22 @@ Full threat model: [SECURITY.md](SECURITY.md).
 
 ### Testing
 
-**176 tests, all passing. 95% statements, 88% branches, 98% functions.**
+**309 tests, all passing. 96% statements, 86% branches, 99% functions.**
 
-Tests run **inside workerd** via `@cloudflare/vitest-pool-workers` — the same
-runtime the Worker deploys to — so Cache API, WebCrypto, streams and
-Request/Response behave exactly as in production rather than as Node shims.
+Nearly all of them run **inside workerd** via `@cloudflare/vitest-pool-workers`
+— the same runtime the Worker deploys to — so Cache API, WebCrypto, streams,
+HTMLRewriter and Request/Response behave exactly as in production rather than as
+Node shims.
+
+The suite is **hermetic**: it holds no credential and makes no network call. The
+pool is deliberately not pointed at `wrangler.jsonc`, because Workers AI has no
+local implementation and a declared `ai` binding makes miniflare open a proxy to
+the real service. Every test builds its own `Env` with a stubbed `AI` instead.
+Verified, not assumed: the suite passes with `HOME` set to an empty directory
+and every Cloudflare variable unset.
+
+A second project runs in jsdom for the one job workerd cannot do — running
+axe-core over a real DOM. See Accessibility below.
 
 | Suite               | Covers                                                                                      |
 | ------------------- | ------------------------------------------------------------------------------------------- |
@@ -213,17 +268,33 @@ Request/Response behave exactly as in production rather than as Node shims.
 
 ### Accessibility
 
-**axe-core 4.13.0 against the live deployment, fully rendered with results
-present: 0 violations, 45 passes, 0 incomplete — in both light and dark
-themes**, across WCAG 2.0/2.1/2.2 A and AA plus best-practice rules.
+**axe-core 4.13.0 finds 0 violations in both light and dark themes**, across
+WCAG 2.0/2.1/2.2 A and AA plus best-practice rules.
 
-Two violations were found and fixed during development: a text token at 4.18:1
-(now compliant) and the standing disclaimer sitting outside any landmark.
+That claim is **enforced, not asserted**. `test/axe.dom.test.ts` runs the real
+axe engine over the real shipped markup on every `npm test` and in CI, with the
+real stylesheet injected — axe ignores hidden elements, so auditing the markup
+without its CSS audits a page nobody is served. It carries a negative control
+that deliberately breaks the page and fails if axe does not notice, because a
+gate that cannot fail proves nothing. Before this existed, axe-core was a
+devDependency nothing imported and the number came from a human who ran it once.
 
-Beyond the automated pass: severity is never carried by colour alone (glyph +
-word + colour); progress is announced through a single polite status region
-rather than one announcement per clause; dark mode is authored as its own
-palette; `prefers-reduced-motion` is honoured; hit targets are ≥44px. Details:
+Five defects were found and fixed that **axe cannot catch**, because they are
+behavioural rather than structural:
+
+| Defect                                                                                                                                                       | Why axe misses it                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
+| The theme toggle flipped both its label and `aria-pressed`, announcing "Light mode, pressed" while dark mode was on — the opposite of the truth (WCAG 4.1.2) | Both states are individually valid markup |
+| Submitting disabled the button the user had just activated, dropping focus to `<body>` before the error alert fired                                          | Focus loss happens at runtime             |
+| The polite live region updated once per clause — up to eighty announcements over one run                                                                     | The region is correctly formed            |
+| The form error was never associated with the field it described: no `aria-invalid`, and `form-error` absent from `aria-describedby` (WCAG 3.3.1)             | The association is added at runtime       |
+| Exceeding the character limit was signalled by red text alone (WCAG 1.4.1)                                                                                   | The colour contrast itself passes         |
+
+Beyond that: severity is never carried by colour alone (glyph + word + colour);
+dark mode is authored as its own palette rather than inverted;
+`prefers-reduced-motion` is honoured; hit targets are ≥44px; the mode selector
+is built from real radios rather than ARIA tabs, so group semantics and
+arrow-key navigation come from the platform. Details:
 [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md).
 
 ### Code Quality
@@ -264,9 +335,17 @@ than no tool.
 - **Plain text only.** PDF and DOCX must be pasted as text. Extraction is a
   meaningful engineering problem and doing it badly would silently corrupt the
   grounding guarantee.
-- **Contract comparison is not implemented.** The brief lists it; the clause
-  alignment it needs is a different problem from the one solved here, and a
-  half-built version would be worse than its absence.
+- **Comparison assumes two versions of one agreement.** Alignment is mutual-best
+  and refuses weak matches, so comparing two unrelated documents correctly
+  produces a long list of one-sided clauses rather than invented correspondences
+  — but the result is not useful, and the explained differences are capped at 40
+  so it cannot become expensive either.
+- **Question answering is extractive, and its recall is lexical.** The synonym
+  table in `src/lib/retrieve.ts` covers the everyday-to-legal vocabulary gap for
+  rental, employment and loan agreements. A question phrased in words that
+  appear nowhere in the document, and that the table does not bridge, will be
+  answered "not addressed" even where a human would connect the two. Measured on
+  the shipped rental sample, that is roughly one question in five.
 - **India-first.** The calibration assumes Indian contracting norms. The
   severity of a term elsewhere may differ.
 - **The model can still be wrong.** Grounding proves a quote is real; it does

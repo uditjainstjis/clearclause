@@ -15,6 +15,9 @@
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
 
-# Fonts are content-addressed by deployment and never change in place.
+# Font filenames carry a hash of their own bytes (see @font-face in styles.css),
+# so a URL genuinely never changes meaning and `immutable` is safe to promise.
+# Without the hash this header would pin a stale font in caches for a year with
+# no way to bust it.
 /fonts/*
   Cache-Control: public, max-age=31536000, immutable

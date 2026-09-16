@@ -59,15 +59,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # The gate is the tree that actually reaches the edge. `hono` is the only
-      # runtime dependency, so this is a tight, meaningful assertion.
-      - name: Audit shipped dependencies
-        run: npm audit --audit-level=high --omit=dev
-      # The build toolchain is reported, not gated. It is not served to anyone,
-      # and a transitive advisory in it must not be able to block a security fix
-      # from shipping. See SECURITY.md > Dependencies.
-      - name: Report build-toolchain advisories
-        run: npm audit --audit-level=high || true
+      # Hard gate on the WHOLE tree, dev dependencies included. No suppression,
+      # no `|| true`, no `--omit=dev` escape hatch: a high or critical advisory
+      # anywhere fails the build. See SECURITY.md > Dependencies for how the one
+      # transitive advisory this project inherited was actually resolved.
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
 
   secrets:
     name: Secret scan

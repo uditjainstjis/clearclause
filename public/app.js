@@ -7,10 +7,14 @@
  *     written with `textContent`. There is no `innerHTML` in this file, so a
  *     document that smuggles markup through the analysis cannot reach the DOM
  *     as markup. The strict CSP is the second line, not the first.
- *  2. **Progress is announced once, results are not.** A live region per clause
- *     would fire twenty announcements at a screen-reader user. Instead a single
- *     polite status region reports progress, and the clause list is ordinary
- *     content the user navigates when they choose.
+ *  2. **Announcements are rationed.** A live region updated per clause fires one
+ *     announcement per clause — up to eighty — and talks over the user for the
+ *     length of the run. A single polite status region reports progress at
+ *     quartiles plus completion, and the clause list is ordinary content the
+ *     user navigates when they choose.
+ *  3. **Busy state never takes focus away.** Controls report `aria-disabled`
+ *     rather than `disabled`, because disabling the element the user just
+ *     activated drops focus to <body> and loses their place in the page.
  */
 
 const $ = (id) => document.getElementById(id);
@@ -23,6 +27,25 @@ const els = {
   btn: $('analyze-btn'),
   count: $('doc-count'),
   formError: $('form-error'),
+  textB: $('doc-text-b'),
+  question: $('ask-question'),
+  askField: $('ask-field'),
+  compareField: $('compare-field'),
+  answerResults: $('answer-results'),
+  answerQuestion: $('answer-question'),
+  answerText: $('answer-text'),
+  answerQuote: $('answer-quote'),
+  answerQuoteText: $('answer-quote-text'),
+  answerQuoteCite: $('answer-quote-cite'),
+  answerUnanswered: $('answer-unanswered'),
+  answerConsulted: $('answer-consulted'),
+  answerConsultedList: $('answer-consulted-list'),
+  answerStats: $('answer-stats'),
+  compareResults: $('compare-results'),
+  compareVerdict: $('compare-verdict'),
+  compareCounts: $('compare-counts'),
+  compareList: $('compare-list'),
+  compareStats: $('compare-stats'),
   progress: $('progress'),
   results: $('results'),
   guardAlert: $('guard-alert'),
@@ -82,10 +105,11 @@ function applyTheme(theme) {
   else root.removeAttribute('data-theme');
   const isDark =
     theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  // State travels on aria-pressed ONLY. The visible label stays "Dark mode" —
+  // it names what the button does, not what is currently on. Flipping both at
+  // once announces "Light mode, pressed" while dark mode is active, which tells
+  // a screen-reader user the opposite of the truth (WCAG 4.1.2).
   els.themeToggle.setAttribute('aria-pressed', String(isDark));
-  els.themeToggle.querySelector('.theme-toggle__label').textContent = isDark
-    ? 'Light mode'
-    : 'Dark mode';
 }
 
 try {
@@ -111,8 +135,13 @@ const MAX_CHARS = 120000;
 
 function updateCount() {
   const n = els.text.value.trim().length;
-  els.count.textContent = `${n.toLocaleString()} characters`;
-  els.count.dataset.state = n > MAX_CHARS ? 'over' : 'ok';
+  const over = n > MAX_CHARS;
+  // The over-limit state is carried in words, not only in the red that
+  // [data-state="over"] applies (WCAG 1.4.1).
+  els.count.textContent = over
+    ? `${n.toLocaleString()} characters — over the ${MAX_CHARS.toLocaleString()} limit`
+    : `${n.toLocaleString()} characters`;
+  els.count.dataset.state = over ? 'over' : 'ok';
 }
 els.text.addEventListener('input', updateCount);
 
@@ -131,29 +160,53 @@ els.file.addEventListener('change', async () => {
 for (const chip of document.querySelectorAll('[data-sample]')) {
   chip.addEventListener('click', async () => {
     const name = chip.dataset.sample;
-    chip.disabled = true;
+    // aria-disabled rather than `disabled`: disabling the element the user just
+    // activated drops focus to <body>, so the role="alert" below is announced
+    // with the user's focus nowhere in particular.
+    if (chip.getAttribute('aria-disabled') === 'true') return;
+    chip.setAttribute('aria-disabled', 'true');
     try {
       const res = await fetch(`/samples/${name}.txt`);
       if (!res.ok) throw new Error('sample unavailable');
       els.text.value = await res.text();
+
+      // In compare mode, a sample that ships a negotiated counter-draft fills
+      // both sides, so the feature can be tried without the reader having to
+      // find two versions of their own agreement first.
+      if (currentMode() === 'compare') {
+        const revised = await fetch(`/samples/${name}-revised.txt`);
+        els.textB.value = revised.ok ? await revised.text() : '';
+      }
+
       updateCount();
       hideError();
       els.text.focus();
     } catch {
       showError('Could not load that example. Please paste your own text.');
+      chip.focus();
     } finally {
-      chip.disabled = false;
+      chip.removeAttribute('aria-disabled');
     }
   });
 }
 
+/** Describedby list when no error is showing. Kept in sync with index.html. */
+const DESCRIBED_BY = 'doc-help doc-count';
+
 function showError(message) {
   els.formError.textContent = message;
   els.formError.hidden = false;
+  // role="alert" announces the message once. These two attributes are what a
+  // user hears when they navigate BACK to the field afterwards — without them
+  // the textarea gives no sign it is the one that failed (WCAG 3.3.1).
+  els.text.setAttribute('aria-invalid', 'true');
+  els.text.setAttribute('aria-describedby', `${DESCRIBED_BY} form-error`);
 }
 function hideError() {
   els.formError.hidden = true;
   els.formError.textContent = '';
+  els.text.removeAttribute('aria-invalid');
+  els.text.setAttribute('aria-describedby', DESCRIBED_BY);
 }
 
 // ---------------------------------------------------------------- render
@@ -352,6 +405,215 @@ els.copyBtn.addEventListener('click', async () => {
   }
 });
 
+// ---------------------------------------------------------------- modes
+
+/** Labels the primary button takes in each mode. */
+const MODE_LABELS = {
+  explain: 'Analyse document',
+  ask: 'Answer my question',
+  compare: 'Compare the two versions',
+};
+
+/** Which panels belong to which mode, so switching clears the other one. */
+const MODE_PANELS = {
+  explain: 'results',
+  ask: 'answerResults',
+  compare: 'compareResults',
+};
+
+function currentMode() {
+  const checked = document.querySelector('input[name="mode"]:checked');
+  return checked ? checked.value : 'explain';
+}
+
+function applyMode() {
+  const mode = currentMode();
+  els.askField.hidden = mode !== 'ask';
+  els.compareField.hidden = mode !== 'compare';
+  els.btn.textContent = MODE_LABELS[mode];
+  // Hide the results of whichever mode the user just left: leaving a previous
+  // answer on screen under a new question is how people misread a page.
+  for (const [name, ref] of Object.entries(MODE_PANELS)) {
+    if (name !== mode) els[ref].hidden = true;
+  }
+  hideError();
+}
+
+for (const radio of document.querySelectorAll('input[name="mode"]')) {
+  radio.addEventListener('change', applyMode);
+}
+
+// ---------------------------------------------------------------- ask + compare
+
+/** Human-readable label for a clause, used in citations. */
+function clauseLabel(index, label) {
+  return label ? `Clause ${label}` : `Clause ${index + 1}`;
+}
+
+function renderAnswer(result) {
+  els.answerQuestion.textContent = `You asked: ${result.question}`;
+  els.answerText.textContent = result.answer;
+  els.answerUnanswered.hidden = result.answered;
+
+  if (result.citation) {
+    els.answerQuote.hidden = false;
+    els.answerQuoteText.textContent = `“${result.citation.quote}”`;
+    els.answerQuoteCite.textContent = `${clauseLabel(
+      result.citation.clauseIndex,
+      result.citation.label,
+    )} of your document, quoted verbatim and checked against it before being shown.`;
+  } else {
+    els.answerQuote.hidden = true;
+  }
+
+  els.answerConsultedList.replaceChildren();
+  for (const clause of result.consulted) {
+    const li = document.createElement('li');
+    const terms = clause.matched.length ? ` — matched on ${clause.matched.join(', ')}` : '';
+    li.textContent = `${clauseLabel(clause.index, clause.label)}${terms}`;
+    els.answerConsultedList.appendChild(li);
+  }
+  els.answerConsulted.hidden = result.consulted.length === 0;
+
+  const s = result.stats;
+  const how = s.cached
+    ? 'served from cache'
+    : s.modelCalls === 0
+      ? 'answered without calling a model'
+      : `${s.modelCalls} model call${s.modelCalls === 1 ? '' : 's'}`;
+  els.answerStats.textContent = `Searched ${s.clausesSearched} clauses, read ${s.clausesConsulted} closely, ${how}, in ${(s.elapsedMs / 1000).toFixed(1)}s.`;
+
+  els.answerResults.hidden = false;
+  renderGuard(result.guard);
+}
+
+const DIRECTION_WORDS = {
+  'worse-for-you': 'Worse for you',
+  'better-for-you': 'Better for you',
+  'no-material-change': 'No material change',
+};
+
+function renderComparison(report) {
+  const { counts } = report;
+  els.compareVerdict.textContent =
+    report.favours === 'a'
+      ? `On balance, "${report.labelA}" treats you better than "${report.labelB}".`
+      : report.favours === 'b'
+        ? `On balance, "${report.labelB}" treats you better than "${report.labelA}".`
+        : report.differences.length === 0
+          ? 'These two documents say the same thing.'
+          : 'Neither version is clearly better for you overall.';
+
+  els.compareCounts.textContent = `${counts['worse-for-you']} worse for you, ${counts['better-for-you']} better for you, ${counts['no-material-change']} cosmetic. ${report.unchangedCount} clauses are untouched.`;
+
+  els.compareList.replaceChildren();
+  for (const diff of report.differences) {
+    const li = document.createElement('li');
+    li.className = 'diff';
+    li.dataset.direction = diff.direction;
+
+    const head = document.createElement('h3');
+    head.className = 'diff__heading';
+    head.textContent = diff.heading;
+    li.appendChild(head);
+
+    const badge = document.createElement('p');
+    badge.className = 'diff__badge';
+    // The direction is stated in words, never by colour alone.
+    const kindWord =
+      diff.kind === 'only-in-a' ? 'Removed' : diff.kind === 'only-in-b' ? 'Added' : 'Changed';
+    badge.textContent = `${kindWord} — ${DIRECTION_WORDS[diff.direction]}`;
+    li.appendChild(badge);
+
+    const summary = document.createElement('p');
+    summary.textContent = diff.summary;
+    li.appendChild(summary);
+
+    for (const [quote, label] of [
+      [diff.quoteA, report.labelA],
+      [diff.quoteB, report.labelB],
+    ]) {
+      if (!quote) continue;
+      const block = document.createElement('blockquote');
+      block.className = 'diff__quote';
+      const text = document.createElement('p');
+      text.textContent = `“${quote}”`;
+      const cite = document.createElement('cite');
+      cite.textContent = label;
+      block.append(text, cite);
+      li.appendChild(block);
+    }
+
+    if (!diff.grounded) {
+      const warn = document.createElement('p');
+      warn.className = 'diff__ungrounded';
+      warn.textContent =
+        'This difference could not be quoted back to either document, so it is shown without a verdict.';
+      li.appendChild(warn);
+    }
+
+    els.compareList.appendChild(li);
+  }
+
+  const s = report.stats;
+  els.compareStats.textContent = `${report.clauseCountA} clauses against ${report.clauseCountB}. ${s.modelCalls} model calls, ${s.cacheHits} from cache, in ${(s.elapsedMs / 1000).toFixed(1)}s.`;
+
+  els.compareResults.hidden = false;
+  renderGuard(report.guard);
+}
+
+async function postJson(path, body) {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payload.error || 'Something went wrong. Please try again.');
+  return payload;
+}
+
+/**
+ * Run the two single-response modes.
+ *
+ * Neither streams: each is one round trip, so the added machinery of SSE would
+ * buy nothing. Errors surface through the same form error channel as analysis,
+ * which is the one place the user already knows to look.
+ */
+async function runAskOrCompare(mode, text) {
+  if (mode === 'ask' && els.question.value.trim().length < 8) {
+    showError('Ask in a full sentence, for example "how much notice must I give?"');
+    els.question.focus();
+    return;
+  }
+  if (mode === 'compare' && els.textB.value.trim().length < 200) {
+    showError('Paste the second version too — at least a few clauses of it.');
+    els.textB.focus();
+    return;
+  }
+
+  setBusy(true);
+  els.guardAlert.hidden = true;
+  try {
+    if (mode === 'ask') {
+      renderAnswer(await postJson('/api/ask', { text, question: els.question.value.trim() }));
+    } else {
+      renderComparison(
+        await postJson('/api/compare', {
+          a: text,
+          b: els.textB.value.trim(),
+          labelA: 'The version you have',
+          labelB: 'The other version',
+        }),
+      );
+    }
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    setBusy(false);
+  }
+}
+
 // ---------------------------------------------------------------- run
 
 /** Parse an SSE byte stream into decoded event objects. */
@@ -377,8 +639,17 @@ async function* readEvents(response) {
   }
 }
 
+/**
+ * Mark the form busy.
+ *
+ * `aria-disabled` rather than `disabled`, and the submit handler returns early
+ * when it is set. A disabled element cannot hold focus, so disabling the button
+ * the user just pressed drops focus to <body> — and everything announced from
+ * then on, including the error alert, arrives with the user's position in the
+ * page lost. This keeps focus exactly where they left it.
+ */
 function setBusy(busy) {
-  els.btn.disabled = busy;
+  els.btn.setAttribute('aria-disabled', String(busy));
   els.btn.textContent = busy ? 'Analysing…' : 'Analyse document';
   els.results.setAttribute('aria-busy', String(busy));
 }
@@ -395,12 +666,21 @@ function showSkeletons(n) {
 
 els.form.addEventListener('submit', async (event) => {
   event.preventDefault();
+  // The button reports busy via aria-disabled, which does not block activation
+  // the way `disabled` does, so the guard has to be here.
+  if (els.btn.getAttribute('aria-disabled') === 'true') return;
   hideError();
 
   const text = els.text.value.trim();
   if (text.length < 200) {
     showError('That is too short to be a contract. Paste at least a few clauses.');
     els.text.focus();
+    return;
+  }
+
+  const mode = currentMode();
+  if (mode !== 'explain') {
+    await runAskOrCompare(mode, text);
     return;
   }
 
@@ -448,7 +728,13 @@ els.form.addEventListener('submit', async (event) => {
         done++;
         lastAnalyses.push(event.analysis);
         renderClause(event.analysis);
-        els.progress.textContent = `Analysed ${done} of ${expected} clauses.`;
+        // A polite live region updated once per clause queues up to
+        // MAX_CLAUSES announcements and talks over the user for the length of
+        // the run. Quartiles give a sense of progress at a pace a person can
+        // actually listen to; the completion message below is always announced.
+        if (done === expected || done % Math.max(1, Math.ceil(expected / 4)) === 0) {
+          els.progress.textContent = `Analysed ${done} of ${expected} clauses.`;
+        }
       } else if (event.type === 'report') {
         lastReport = event.report;
         renderReport(event.report, event.stats);
@@ -465,3 +751,4 @@ els.form.addEventListener('submit', async (event) => {
 });
 
 updateCount();
+applyMode();

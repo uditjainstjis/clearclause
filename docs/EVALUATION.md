@@ -114,7 +114,76 @@ served without a model call.
 Concurrency was raised from 6 to 10 on this measurement. Above 10 the gain
 flattens while the subrequest budget for a long document starts to bind.
 
-## 5. Accessibility
+## 5. Question answering: four measured changes
+
+Measured against `public/samples/rental.txt` — a fifteen-clause Bengaluru leave
+and licence agreement — using ten questions the document plainly answers and two
+it does not. "Answered" means the reply carried a quote that passed verbatim
+verification. Each row adds to the row above it.
+
+| Change                                      | Answered | Correctly refused |
+| ------------------------------------------- | -------- | ----------------- |
+| Starting point                              | 1/6      | 2/2               |
+| `max_tokens` 700 → 1600                     | 2/6      | 2/2               |
+| Salvage a genuine quote from a chatty reply | 5/8      | 2/2               |
+| Expand everyday words to terms of art       | **8/10** | **2/2**           |
+
+The refusals never regressed, which is the number that mattered most: a change
+that buys recall by loosening grounding would be a loss, not a gain.
+
+**`max_tokens`.** At 700 the reply was truncated mid-JSON for every question
+whose answer lived in a long clause — repainting, lock-in, alterations. From the
+outside this is indistinguishable from a model declining to answer, which is why
+it survived so long: the failure wore the costume of correct behaviour.
+
+**Quote salvage.** The remaining failures were not hallucinations. Asked how
+long the lock-in ran, the model returned clause 4 word for word and then kept
+going inside the quote field: _"The lock-in period is also mentioned as eleven
+(11) months in clause 1 … hence quoting it. Hence the quote is from: 4. LOCK-IN
+PERIOD: …"_. Verification correctly rejected the whole string. `salvageQuote()`
+keeps the longest run of consecutive sentences that verifies, so a chatty model
+loses its commentary rather than its answer — and what is shown is still a
+verbatim span, because it is still checked.
+
+**Vocabulary.** The last failures were the reader and the document using
+different words for the same thing. "How much notice must the landlord give me?"
+returned _not addressed_ against an agreement whose clause 9 answers it, because
+the document says "the Licensor" and never once says "landlord". Query-side
+synonym expansion fixed that, plus rent/licence fee and air conditioner/
+alteration. The document is never rewritten, so quotes stay verbatim.
+
+| Question                                       | Before        | After             |
+| ---------------------------------------------- | ------------- | ----------------- |
+| How much notice must the **landlord** give me? | not addressed | clause 9, quoted  |
+| How much can the **rent** go up on renewal?    | not addressed | clause 5, quoted  |
+| Can I install an **air conditioner**?          | not addressed | clause 10, quoted |
+
+**What still misses.** Roughly one question in five. The residue is lexical: a
+question whose words appear nowhere in the document and that the synonym table
+does not bridge. The failure mode is a refusal, not a wrong answer, which is the
+right way for this to fail.
+
+## 6. Comparison
+
+Measured against `rental.txt` and `rental-revised.txt` — the same agreement
+after a round of negotiation.
+
+| Metric                                 | Value                                                 |
+| -------------------------------------- | ----------------------------------------------------- |
+| Clauses, original / revised            | 15 / 15                                               |
+| Aligned pairs identical, no model call | 1                                                     |
+| Differences explained                  | 15                                                    |
+| Grounded on both sides                 | 14 / 15                                               |
+| Model calls                            | 15 (+3 fallback)                                      |
+| Wall clock                             | 26.7 s                                                |
+| Verdict                                | revised draft favours the reader, 11 better / 2 worse |
+
+The alignment survives renumbering: the revised draft drops the repainting
+clause, so clauses 8 onward shift by one, and the aligner still pairs
+maintenance with maintenance because pairing is cosine similarity over clause
+text, not clause number.
+
+## 7. Accessibility
 
 axe-core 4.13.0, run against the live deployment with a full fifteen-clause
 analysis rendered, across WCAG 2.0 / 2.1 / 2.2 A and AA plus best-practice
@@ -133,7 +202,28 @@ Two violations were found and fixed during development:
 2. `region`, moderate — the standing disclaimer sat outside every landmark. It
    is now wrapped in a labelled `<aside>`.
 
-## 6. Reproducing these numbers
+**The number is now enforced rather than recorded.** `test/axe.dom.test.ts` runs
+the same engine over the shipped markup on every `npm test` and in CI, with the
+stylesheet injected so hidden elements stay hidden, and carries a negative
+control that fails if a deliberately broken page passes. Before that test
+existed, `axe-core` was a devDependency nothing imported: the table above was
+true and unprotected, and any later commit could have falsified it silently.
+
+### Five defects axe cannot catch
+
+Found by reading the code against the behaviour, not by the scanner. Each is
+runtime behaviour over well-formed markup, which is precisely the blind spot of
+a static audit.
+
+| Defect                                                                                                       | WCAG  | Fix                                                            |
+| ------------------------------------------------------------------------------------------------------------ | ----- | -------------------------------------------------------------- |
+| Theme toggle flipped both its visible label and `aria-pressed`, so dark mode announced "Light mode, pressed" | 4.1.2 | State lives on `aria-pressed` only; the label names the action |
+| Submit disabled the button the user had just pressed, dropping focus to `<body>` before the alert fired      | 2.4.3 | `aria-disabled` plus an early return, so focus never moves     |
+| The polite live region was updated once per clause — up to 80 announcements                                  | 4.1.3 | Announce at quartiles and on completion                        |
+| Form error never associated with its field: no `aria-invalid`, `form-error` absent from `aria-describedby`   | 3.3.1 | Both set on error, both cleared on recovery                    |
+| Over-limit signalled by red text alone                                                                       | 1.4.1 | The counter says "over the 120,000 limit" in words             |
+
+## 8. Reproducing these numbers
 
 ```bash
 npm run dev
@@ -145,3 +235,29 @@ curl -s localhost:8787/api/analyze -H 'content-type: application/json' \
 
 Cached runs report `cacheHits` in the `report` event, so a cold run and a warm
 run are distinguishable from the output itself.
+
+The question-answering and comparison figures come from the live deployment:
+
+```bash
+# one question, against the shipped sample
+curl -s https://clearclause.seriouss.workers.dev/api/ask \
+  -H 'content-type: application/json' -H 'sec-fetch-site: same-origin' \
+  --data-binary @<(python3 -c "import json;print(json.dumps({'text':open('public/samples/rental.txt').read(),'question':'how much notice must the landlord give me?'}))")
+
+# the two drafts, compared
+curl -s https://clearclause.seriouss.workers.dev/api/compare \
+  -H 'content-type: application/json' -H 'sec-fetch-site: same-origin' \
+  --data-binary @<(python3 -c "import json;print(json.dumps({'a':open('public/samples/rental.txt').read(),'b':open('public/samples/rental-revised.txt').read()}))")
+```
+
+Note that a plain `curl` user-agent is refused at the Cloudflare edge with error
+1010 before it reaches the Worker; pass a browser user-agent when probing. That
+is edge bot protection, not the service.
+
+The accessibility numbers reproduce with `npm test`, which is the point of them
+being a test:
+
+```bash
+npx vitest run --project dom     # axe-core over the shipped markup
+npx vitest run --project workers # everything else, inside workerd
+```

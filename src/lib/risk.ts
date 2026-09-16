@@ -1,4 +1,12 @@
-import type { ClauseAnalysis, DocType, DocumentReport, Obligation, RiskLevel } from './types';
+import { findInconsistencies } from './consistency';
+import type {
+  Clause,
+  ClauseAnalysis,
+  DocType,
+  DocumentReport,
+  Obligation,
+  RiskLevel,
+} from './types';
 
 /**
  * Aggregation of per-clause analyses into a document-level report.
@@ -117,7 +125,11 @@ export function collectQuestions(analyses: readonly ClauseAnalysis[], limit = 8)
 }
 
 /** Assemble the complete document report. */
-export function buildReport(analyses: readonly ClauseAnalysis[], docType: DocType): DocumentReport {
+export function buildReport(
+  analyses: readonly ClauseAnalysis[],
+  docType: DocType,
+  clauses: readonly Clause[] = [],
+): DocumentReport {
   return {
     docType,
     clauseCount: analyses.length,
@@ -127,5 +139,9 @@ export function buildReport(analyses: readonly ClauseAnalysis[], docType: DocTyp
     obligations: collectObligations(analyses),
     questions: collectQuestions(analyses),
     ungroundedCount: analyses.filter((a) => !a.grounded).length,
+    // Computed from the clause text, not from the analyses: a contradiction is
+    // a property of what the document says, and must not depend on whether a
+    // model happened to notice it.
+    inconsistencies: findInconsistencies(clauses),
   };
 }

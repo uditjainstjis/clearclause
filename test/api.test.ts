@@ -332,3 +332,144 @@ describe('rate limiting', () => {
     expect(res.status).toBe(200);
   });
 });
+
+/**
+ * The gate every document-bearing route sits behind.
+ *
+ * This is the CSRF control, and the reason it is a content-type check rather
+ * than a token is written up in the `guardApi` comment in src/index.ts.
+ */
+describe('cross-site request protection', () => {
+  async function post(path: string, headers: Record<string, string>): Promise<Response> {
+    return worker.fetch(
+      new Request(`https://clearclause.test${path}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ text: DOC, question: 'how much notice must I give?' }),
+      }),
+      stubEnv(),
+      {} as ExecutionContext,
+    );
+  }
+
+  for (const path of ['/api/analyze', '/api/ask', '/api/compare']) {
+    it(`rejects a form-style content type on ${path}`, async () => {
+      // text/plain is a CORS "simple request": it crosses origins with no
+      // preflight, so it is the shape an attack actually takes.
+      const res = await post(path, { 'content-type': 'text/plain' });
+      expect(res.status).toBe(415);
+      expect((await res.json<{ code: string }>()).code).toBe('unsupported_media_type');
+    });
+
+    it(`rejects a cross-site fetch on ${path}`, async () => {
+      const res = await post(path, {
+        'content-type': 'application/json',
+        'sec-fetch-site': 'cross-site',
+      });
+      expect(res.status).toBe(403);
+    });
+
+    it(`accepts a same-origin fetch on ${path}`, async () => {
+      const res = await post(path, {
+        'content-type': 'application/json',
+        'sec-fetch-site': 'same-origin',
+      });
+      expect(res.status).not.toBe(403);
+      expect(res.status).not.toBe(415);
+    });
+  }
+
+  it('still serves a direct API client that sends no Sec-Fetch-Site at all', async () => {
+    // curl and server-side callers omit the header. They carry no cookie or
+    // ambient authority, so there is no confused deputy to protect against.
+    const res = await post('/api/analyze', { 'content-type': 'application/json' });
+    expect(res.status).toBe(200);
+  });
+
+  it('does not spend the visitor’s rate limit on a rejected cross-site request', async () => {
+    const limit = vi.fn(async () => ({ success: true }));
+    const res = await worker.fetch(
+      new Request('https://clearclause.test/api/analyze', {
+        method: 'POST',
+        headers: { 'content-type': 'text/plain' },
+        body: '{}',
+      }),
+      stubEnv({ RATE_LIMITER: { limit } }),
+      {} as ExecutionContext,
+    );
+    expect(res.status).toBe(415);
+    expect(limit).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Error paths on the two JSON routes. Each returns a code the front end maps to
+ * a specific message, so a wrong code is a wrong message to a user.
+ */
+describe('the ask and compare routes', () => {
+  async function call(path: string, body: unknown, env = stubEnv()): Promise<Response> {
+    return worker.fetch(
+      new Request(`https://clearclause.test${path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'sec-fetch-site': 'same-origin' },
+        body: typeof body === 'string' ? body : JSON.stringify(body),
+      }),
+      env,
+      {} as ExecutionContext,
+    );
+  }
+
+  it('rejects a malformed JSON body on /api/ask', async () => {
+    const res = await call('/api/ask', '{not json');
+    expect(res.status).toBe(400);
+    expect((await res.json<{ code: string }>()).code).toBe('bad_json');
+  });
+
+  it('rejects a malformed JSON body on /api/compare', async () => {
+    const res = await call('/api/compare', '{not json');
+    expect(res.status).toBe(400);
+    expect((await res.json<{ code: string }>()).code).toBe('bad_json');
+  });
+
+  it('names the missing question rather than failing generically', async () => {
+    const res = await call('/api/ask', { text: DOC });
+    expect(res.status).toBe(400);
+    expect((await res.json<{ code: string }>()).code).toBe('missing_question');
+  });
+
+  it('rejects a question that is only a couple of words', async () => {
+    const res = await call('/api/ask', { text: DOC, question: 'rent?' });
+    expect(res.status).toBe(400);
+    expect((await res.json<{ code: string }>()).code).toBe('question_too_short');
+  });
+
+  it('says which of the two documents was unusable', async () => {
+    const res = await call('/api/compare', { a: DOC, b: 'too short' });
+    expect(res.status).toBe(400);
+    expect((await res.json<{ error: string }>()).error).toMatch(/Second document/);
+  });
+
+  it('answers a well-formed question', async () => {
+    const res = await call('/api/ask', {
+      text: DOC,
+      question: 'how much notice must either party give?',
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json<{ consulted: unknown[]; guard: unknown }>();
+    expect(Array.isArray(body.consulted)).toBe(true);
+    expect(body.guard).toBeDefined();
+  });
+
+  it('compares two well-formed documents', async () => {
+    const res = await call('/api/compare', { a: DOC, b: DOC.replace('sixty', 'ninety') });
+    expect(res.status).toBe(200);
+    const body = await res.json<{ favours: unknown; counts: unknown }>();
+    expect(body).toHaveProperty('favours');
+    expect(body).toHaveProperty('counts');
+  });
+
+  it('still 404s an unknown API route', async () => {
+    const res = await call('/api/nonsense', {});
+    expect(res.status).toBe(404);
+  });
+});

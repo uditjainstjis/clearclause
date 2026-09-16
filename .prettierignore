@@ -3,3 +3,6 @@ coverage
 worker-configuration.d.ts
 public/fonts
 package-lock.json
+
+# Session working notes, kept out of the repo entirely; see .gitignore.
+.claude/

@@ -45,7 +45,10 @@ export function extractJson(raw: unknown): Record<string, unknown> | null {
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
     const obj = raw as Record<string, unknown>;
     if ('response' in obj) return extractJson(obj.response);
-    if ('heading' in obj || 'risk' in obj) return obj;
+    // Any of the three schemas this project asks for, recognised by a field
+    // unique to each: clause analysis, a question answer, a compared
+    // difference. Without this an already-parsed reply would be thrown away.
+    if ('risk' in obj || 'answered' in obj || 'direction' in obj) return obj;
     return null;
   }
   if (typeof raw !== 'string') return null;

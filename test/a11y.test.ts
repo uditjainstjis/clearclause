@@ -17,6 +17,11 @@ interface Element {
   tag: string;
   attrs: Record<string, string>;
   text: string;
+  /** Enclosed by a <label>, which names it implicitly with no `for` needed. */
+  inLabel: boolean;
+  /** Inside a <template>. Inert until cloned, so it is not part of the
+   *  document's heading outline or landmark structure. */
+  inTemplate: boolean;
 }
 
 const VOID_TAGS = new Set([
@@ -52,7 +57,14 @@ beforeAll(async () => {
         const attrs: Record<string, string> = {};
         for (const [k, v] of el.attributes) if (k) attrs[k] = v ?? '';
         if (attrs.id) ids.add(attrs.id);
-        const node: Element = { tag: el.tagName, attrs, text: '' };
+        const node: Element = {
+          tag: el.tagName,
+          attrs,
+          text: '',
+          // Captured from the stack, so each element knows what encloses it.
+          inLabel: open.some((a) => a.tag === 'label'),
+          inTemplate: open.some((a) => a.tag === 'template'),
+        };
         elements.push(node);
         // Void elements have no end tag; asking for one is a parser error.
         if (VOID_TAGS.has(el.tagName)) return;
@@ -90,9 +102,22 @@ describe('document structure', () => {
     expect(byTag('h1')).toHaveLength(1);
   });
 
+  it('gives template headings the level that is correct where they are cloned', () => {
+    // The clause template is excluded from the outline check above because it
+    // is inert, so its level is asserted here instead rather than going
+    // unchecked. Clauses are inserted under the h3 "Every clause, in plain
+    // English", so an h4 is the only level that does not skip.
+    const templateHeadings = elements.filter((e) => e.inTemplate && /^h[1-6]$/.test(e.tag));
+    expect(templateHeadings.length).toBeGreaterThan(0);
+    for (const h of templateHeadings) expect(h.tag).toBe('h4');
+  });
+
   it('does not skip a heading level', () => {
+    // <template> content is inert: it is not in the accessibility tree until it
+    // is cloned into place, and where it happens to sit in the source says
+    // nothing about the outline a user navigates.
     const levels = elements
-      .filter((e) => /^h[1-4]$/.test(e.tag))
+      .filter((e) => /^h[1-4]$/.test(e.tag) && !e.inTemplate)
       .map((e) => Number(e.tag.slice(1)));
     for (let i = 1; i < levels.length; i++) {
       expect(levels[i]! - levels[i - 1]!).toBeLessThanOrEqual(1);
@@ -108,11 +133,20 @@ describe('document structure', () => {
 });
 
 describe('form controls', () => {
+  /**
+   * Can this control acquire an accessible name?
+   *
+   * Four ways, and a checker that knows only the first three reports a false
+   * failure on perfectly good markup: an explicit ARIA name, an `id` a
+   * `<label for>` can point at, or being wrapped in a `<label>`, which names
+   * the control from the label's own text with no `for` attribute at all.
+   */
   const labelled = (el: Element): boolean =>
-    Boolean(el.attrs['aria-label'] || el.attrs['aria-labelledby'] || el.attrs.id);
+    Boolean(el.attrs['aria-label'] || el.attrs['aria-labelledby'] || el.attrs.id || el.inLabel);
 
   it('gives every interactive control an accessible name', () => {
     for (const el of [...byTag('input'), ...byTag('select'), ...byTag('textarea')]) {
+      if (el.attrs.type === 'hidden') continue;
       expect(labelled(el), `<${el.tag}> has no way to be named`).toBe(true);
     }
   });

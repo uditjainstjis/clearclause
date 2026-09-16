@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { truncateQuote, verifyQuote } from '../src/lib/grounding';
+import { salvageQuote, truncateQuote, verifyQuote } from '../src/lib/grounding';
 
 const CLAUSE =
   '14. LOCK-IN PERIOD: The Licensee shall not vacate the premises before expiry of eleven (11) months. ' +
@@ -95,5 +95,61 @@ describe('truncateQuote', () => {
     expect(out.endsWith('…')).toBe(true);
     expect(out.length).toBeLessThanOrEqual(21);
     expect(out).not.toContain('delt…');
+  });
+});
+
+describe('salvageQuote', () => {
+  const CLAUSE =
+    '4. LOCK-IN PERIOD: The Licensee shall not vacate the premises before expiry of the full eleven (11) months. In the event the Licensee vacates prior thereto, the Security Deposit shall stand forfeited in its entirety.';
+
+  it('returns a quote that already verifies, untouched', () => {
+    const q =
+      'The Licensee shall not vacate the premises before expiry of the full eleven (11) months.';
+    expect(salvageQuote(q, CLAUSE)).toBe(q);
+  });
+
+  it('strips commentary the model appended after a genuine quote', () => {
+    // The real failure this exists for: a correct citation followed by the
+    // model explaining itself inside the quote field.
+    const q =
+      'The Licensee shall not vacate the premises before expiry of the full eleven (11) months. The lock-in is also implied by clause 1, hence quoting it. Hence the quote is from: 4. LOCK-IN PERIOD.';
+    const out = salvageQuote(q, CLAUSE);
+    expect(out).toBe(
+      'The Licensee shall not vacate the premises before expiry of the full eleven (11) months.',
+    );
+    expect(verifyQuote(out, CLAUSE).grounded).toBe(true);
+  });
+
+  it('strips commentary the model put before the quote', () => {
+    const q =
+      'Here is the relevant text. The Licensee shall not vacate the premises before expiry of the full eleven (11) months.';
+    expect(salvageQuote(q, CLAUSE)).toContain('shall not vacate the premises');
+  });
+
+  it('keeps the longest verifying run, not merely the first', () => {
+    const q =
+      'Some preamble. The Licensee shall not vacate the premises before expiry of the full eleven (11) months. In the event the Licensee vacates prior thereto, the Security Deposit shall stand forfeited in its entirety. And a trailing remark.';
+    const out = salvageQuote(q, CLAUSE);
+    expect(out).toContain('shall not vacate');
+    expect(out).toContain('stand forfeited in its entirety');
+  });
+
+  it('salvages nothing from a quote that was simply invented', () => {
+    expect(
+      salvageQuote(
+        'The Licensee may leave at any time without penalty. This is stated plainly.',
+        CLAUSE,
+      ),
+    ).toBe('');
+  });
+
+  it('refuses to salvage a fragment too short to be evidence', () => {
+    expect(salvageQuote('Not in here at all. The Licensee shall not.', CLAUSE)).toBe('');
+  });
+
+  it('returns nothing when there is only one sentence and it does not verify', () => {
+    expect(
+      salvageQuote('The Licensee may vacate at will whenever they wish to do so.', CLAUSE),
+    ).toBe('');
   });
 });

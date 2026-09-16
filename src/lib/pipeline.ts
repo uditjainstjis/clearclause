@@ -1,4 +1,5 @@
 import { analyzeClause, classifyDocType, type Env } from './ai';
+import { mapConcurrent } from './concurrent';
 import { makeNonce, scanForInjection } from './guard';
 import { redactPII } from './redact';
 import { buildReport } from './risk';
@@ -62,42 +63,6 @@ export function validateInput(text: unknown): string {
     );
   }
   return trimmed;
-}
-
-/**
- * Map over clauses with bounded concurrency, yielding each result the moment
- * it is ready.
- *
- * A worker pool rather than fixed-size batches: batching would idle on the
- * slowest clause in each batch, which for contracts (clause lengths vary by an
- * order of magnitude) is most of the time.
- */
-async function* mapConcurrent<T, R>(
-  items: readonly T[],
-  limit: number,
-  fn: (item: T) => Promise<R>,
-): AsyncGenerator<R> {
-  const executing = new Map<number, Promise<{ slot: number; value: R }>>();
-  let next = 0;
-
-  const start = (slot: number): void => {
-    const item = items[next];
-    if (item === undefined) return;
-    next++;
-    executing.set(
-      slot,
-      fn(item).then((value) => ({ slot, value })),
-    );
-  };
-
-  for (let slot = 0; slot < Math.min(limit, items.length); slot++) start(slot);
-
-  while (executing.size > 0) {
-    const { slot, value } = await Promise.race(executing.values());
-    executing.delete(slot);
-    yield value;
-    if (next < items.length) start(slot);
-  }
 }
 
 export interface AnalyzeOptions {
@@ -166,5 +131,5 @@ export async function* analyzeDocument(
 
   analyses.sort((a, b) => a.index - b.index);
   stats.elapsedMs = Date.now() - startedAt;
-  yield { type: 'report', report: buildReport(analyses, docType), stats };
+  yield { type: 'report', report: buildReport(analyses, docType, clauses), stats };
 }

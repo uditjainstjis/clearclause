@@ -1,13 +1,13 @@
 @font-face {
   font-family: 'Fraunces';
-  src: url('/fonts/fraunces.woff2') format('woff2-variations');
+  src: url('/fonts/fraunces.2c328742.woff2') format('woff2-variations');
   font-weight: 600;
   font-display: swap;
   font-style: normal;
 }
 @font-face {
   font-family: 'InterVar';
-  src: url('/fonts/inter.woff2') format('woff2-variations');
+  src: url('/fonts/inter.c9407645.woff2') format('woff2-variations');
   font-weight: 400 600;
   font-display: swap;
   font-style: normal;
@@ -565,16 +565,20 @@ select:focus-visible {
   background: var(--c-400);
   color: var(--n-950);
 }
-.btn--primary:hover:not(:disabled) {
+.btn--primary:hover:not(:disabled, [aria-disabled='true']) {
   background: var(--n-700);
   box-shadow: var(--elev-2);
   transform: translateY(-1px);
 }
-.btn--primary:active:not(:disabled) {
+.btn--primary:active:not(:disabled, [aria-disabled='true']) {
   transform: translateY(0);
   transition-duration: 90ms;
 }
-.btn:disabled {
+/* Busy controls report aria-disabled rather than `disabled`, so that the
+   element the user just activated keeps focus (see setBusy in app.js). The
+   styling has to follow the attribute that is now actually set. */
+.btn:disabled,
+.btn[aria-disabled='true'] {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
@@ -1005,4 +1009,179 @@ select:focus-visible {
     border: 1px solid #999;
     break-inside: avoid;
   }
+}
+
+/* ---------------------------------------------------------------- modes */
+
+/* A segmented control built from real radios. The input stays in the accessible
+   tree and keeps its focus ring; only its default rendering is replaced. */
+.modes {
+  border: 0;
+  padding: 0;
+  margin: 0 0 24px;
+}
+.modes__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.mode {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 13px 15px 14px;
+  border: 1px solid var(--rule);
+  border-radius: calc(var(--r) - 6px);
+  background: var(--surface-1);
+  cursor: pointer;
+  transition:
+    border-color 140ms var(--ease-out-quart),
+    background 140ms var(--ease-out-quart),
+    box-shadow 140ms var(--ease-out-quart);
+}
+.mode:hover {
+  border-color: var(--n-300);
+  background: var(--surface-0);
+}
+.mode input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.mode__title {
+  font-weight: 600;
+  color: var(--ink);
+}
+.mode__hint {
+  font-size: 0.84rem;
+  color: var(--ink-faint);
+}
+/* Selection is carried by a heavier border and a left rule, not by colour
+   alone, so it survives a monochrome or high-contrast rendering. */
+.mode:has(input:checked) {
+  border-color: var(--accent);
+  box-shadow:
+    inset 3px 0 0 var(--accent),
+    var(--elev-1);
+  background: var(--surface-1);
+}
+.mode:has(input:focus-visible) {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------- answer */
+
+.answer__question {
+  color: var(--ink-faint);
+  font-size: 0.92rem;
+  margin: 0 0 10px;
+}
+.answer__text {
+  font-size: 1.12rem;
+  line-height: 1.55;
+  margin: 0 0 16px;
+  max-width: 62ch;
+}
+.answer__quote {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-0);
+  border-radius: 0 calc(var(--r) - 10px) calc(var(--r) - 10px) 0;
+}
+.answer__quote p {
+  margin: 0 0 6px;
+  font-style: italic;
+}
+.answer__quote cite,
+.diff__quote cite {
+  font-style: normal;
+  font-size: 0.82rem;
+  color: var(--ink-faint);
+}
+.answer__consulted {
+  margin-bottom: 12px;
+}
+.answer__consulted summary {
+  cursor: pointer;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+}
+.answer__consulted ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+}
+
+/* ---------------------------------------------------------------- compare */
+
+.compare-verdict {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0 0 6px;
+  text-wrap: balance;
+}
+.diff-list {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+.diff {
+  background: var(--surface-1);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--rule);
+  border-radius: var(--r);
+  padding: var(--pad);
+  box-shadow: var(--elev-1);
+}
+.diff[data-direction='worse-for-you'] {
+  border-left-color: var(--risk-high);
+}
+.diff[data-direction='better-for-you'] {
+  border-left-color: var(--risk-low);
+}
+.diff__heading {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+}
+/* The direction is always spelled out here in words; the coloured rule above is
+   redundant reinforcement, never the only signal. */
+.diff__badge {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.diff[data-direction='worse-for-you'] .diff__badge {
+  color: var(--risk-high);
+}
+.diff[data-direction='better-for-you'] .diff__badge {
+  color: var(--risk-low);
+}
+.diff__quote {
+  margin: 10px 0 0;
+  padding: 10px 14px;
+  background: var(--surface-0);
+  border-radius: calc(var(--r) - 10px);
+}
+.diff__quote p {
+  margin: 0 0 4px;
+  font-style: italic;
+}
+.diff__ungrounded {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+  color: var(--ink-faint);
 }

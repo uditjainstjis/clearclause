@@ -110,3 +110,55 @@ export function truncateQuote(quote: string, max = 240): string {
   const lastSpace = cut.lastIndexOf(' ');
   return `${(lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
 }
+
+/**
+ * Shortest salvaged quote worth showing. Below this a "quote" is a fragment
+ * that carries no evidence, and silence is the better answer.
+ */
+const MIN_SALVAGE_CHARS = 40;
+
+/**
+ * Recover the genuine quote from a reply that wrapped commentary around one.
+ *
+ * Measured against the live service on 2026-09-17: asked how long a lock-in
+ * period ran, the model returned clause 4 word for word — and then continued,
+ * inside the quote field, "The lock-in period is also mentioned as eleven (11)
+ * months in clause 1 … hence quoting it. Hence the quote is from: 4. LOCK-IN
+ * PERIOD: …". Verbatim verification correctly rejected the whole string, and a
+ * correct answer was lost with it. That failure is a model being chatty in the
+ * wrong field, not a model inventing evidence, and the two deserve different
+ * treatment.
+ *
+ * So the reply is split into sentences and the longest run of *consecutive*
+ * sentences that verifies against the source is kept. The guarantee is
+ * unchanged and is the reason this is safe: whatever survives is still a
+ * verbatim span of the document, because it is still checked by
+ * {@link verifyQuote}. Nothing is repaired, reworded or reconstructed — text
+ * that was never in the source is only ever dropped.
+ *
+ * @param quote  the model's quote field, possibly padded with commentary
+ * @param source the clause the quote should have come from
+ * @returns the longest verifying run of sentences, or '' if nothing verifies
+ */
+export function salvageQuote(quote: string, source: string): string {
+  if (verifyQuote(quote, source).grounded) return quote;
+
+  // Keep the delimiters so the rejoined text matches the source exactly.
+  const parts = quote.split(/(?<=[.;:?!])\s+/).filter(Boolean);
+  if (parts.length < 2) return '';
+
+  let best = '';
+  for (let start = 0; start < parts.length; start++) {
+    // Longest first: the moment a run verifies, no shorter run inside it can
+    // beat it, so the inner loop can stop.
+    for (let end = parts.length; end > start; end--) {
+      const candidate = parts.slice(start, end).join(' ').trim();
+      if (candidate.length <= best.length || candidate.length < MIN_SALVAGE_CHARS) continue;
+      if (verifyQuote(candidate, source).grounded) {
+        best = candidate;
+        break;
+      }
+    }
+  }
+  return best;
+}

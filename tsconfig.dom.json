@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "types": ["node"]
+  },
+  "include": ["test/**/*.dom.test.ts", "src/vite-env.d.ts"],
+  "exclude": ["node_modules", "dist"]
+}

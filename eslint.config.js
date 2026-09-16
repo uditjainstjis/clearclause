@@ -48,6 +48,20 @@ export default tseslint.config(
     rules: { 'no-undef': 'error' },
   },
   {
+    // Tests that run in jsdom rather than workerd. They are excluded from the
+    // root tsconfig on purpose — the Worker must not be able to reach for
+    // `document` and still typecheck — so typed linting needs pointing at the
+    // config that does have the DOM lib and Node's types.
+    files: ['test/**/*.dom.test.ts'],
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
+        project: './tsconfig.dom.json',
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
     files: ['test/**/*.ts'],
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',
@@ -55,6 +69,11 @@ export default tseslint.config(
       // Test doubles must be async to satisfy the interface they stand in for,
       // even when the fake implementation has nothing to await.
       '@typescript-eslint/require-await': 'off',
+      // `expect(env.AI.run).not.toHaveBeenCalled()` reads a vi.fn() off the
+      // stub object it was installed on. The rule is guarding against losing
+      // `this`, which a spy has none of — it is a false positive here, and the
+      // alternative is casting every assertion into unreadability.
+      '@typescript-eslint/unbound-method': 'off',
     },
   },
 );
