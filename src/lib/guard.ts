@@ -109,8 +109,18 @@ export function fenceUntrusted(text: string, nonce: string): string {
   const defanged = text
     .replace(/<\|/g, '<\u200b|')
     .replace(/\|>/g, '|\u200b>')
-    .replace(/\[\/?INST\]/gi, (m) => m.replace('[', '[\u200b'))
-    .replace(new RegExp(nonce, 'g'), '');
+    // A capture group rather than a nested `m.replace('[', ...)`. The nested
+    // form replaced only the FIRST '[' in each match — correct here, since a
+    // match contains exactly one, but correct by accident. CodeQL flags the
+    // shape as js/incomplete-sanitization and it is right to: the next person
+    // to widen this pattern would inherit a silent partial escape.
+    .replace(/\[(\/?)INST\]/gi, '[\u200b$1INST]')
+    // split/join rather than `new RegExp(nonce)`. The nonce is generated from
+    // crypto bytes and cannot contain a metacharacter, but building a pattern
+    // out of a runtime value is the shape injection bugs take, and a literal
+    // string split cannot be talked into meaning something else.
+    .split(nonce)
+    .join('');
   return `<<<${nonce}\n${defanged}\n${nonce}>>>`;
 }
 
