@@ -6,8 +6,77 @@ way.
 
 ## Reporting a vulnerability
 
-Open an issue at <https://github.com/uditjainstjis/clearclause/issues>. Please
-do not include a real contract in a public report.
+**Report privately, not in a public issue.** Use GitHub's private vulnerability
+reporting — [open a draft advisory][report] — which is visible only to the
+maintainer until a fix ships. The machine-readable pointer to this policy is at
+[`/.well-known/security.txt`](public/.well-known/security.txt) (RFC 9116).
+
+[report]: https://github.com/uditjainstjis/clearclause/security/advisories/new
+
+**Please do not include a real contract in a report.** A reproduction case is
+almost always better made from `public/samples/rental.txt` or a document you
+have invented. If the behaviour genuinely depends on private text, say so and
+describe its shape rather than pasting it.
+
+What to expect:
+
+|                                                          |                                                   |
+| -------------------------------------------------------- | ------------------------------------------------- |
+| Acknowledgement                                          | within 48 hours                                   |
+| Initial assessment                                       | within 7 days                                     |
+| Fix or mitigation for a confirmed high or critical issue | within 30 days                                    |
+| Public disclosure                                        | after a fix ships, or 90 days, whichever is first |
+
+**Safe harbour.** Research conducted in good faith under this policy is
+authorised, and will not be pursued. Good faith means: use your own documents or
+the shipped samples; do not access, modify or retain anyone else's data; do not
+degrade the service for other users — the CPU-exhaustion class is exactly what
+this deployment is most sensitive to, so demonstrate it against a local
+`npm run dev` rather than against production; and give a reasonable window to
+fix before disclosing.
+
+### Supported versions
+
+Only the current deployment and the tip of `main` are supported. There are no
+released versions, no tags, and no backports — the service is continuously
+deployed, so a fix reaches production in one step.
+
+| Version                  | Supported               |
+| ------------------------ | ----------------------- |
+| `main` / live deployment | yes                     |
+| Any earlier commit       | no — rebase onto `main` |
+
+### Acknowledgements
+
+No external reports have been received yet. Anyone who reports a valid issue
+will be credited here unless they ask not to be.
+
+## Authentication and authorisation
+
+There is none, deliberately, and the reasoning is worth stating rather than
+leaving as an apparent omission.
+
+The service holds no account, no session, no cookie and no credential. It stores
+no document. Every request is independent, and carries everything it operates on
+in its own body. There is therefore no subject to authenticate and no resource
+to authorise access to: an attacker who could perfectly impersonate any user
+would gain the ability to analyse their own document, which they already have.
+
+Two consequences follow, and both are handled rather than ignored:
+
+- **Anything a user can reach, everyone can reach.** So the protections are the
+  ones that make sense against anonymous traffic — per-IP rate limiting, hard
+  input caps, bounded concurrency, and CPU-bounded parsing (see
+  `test/redact.test.ts`, which pins a regression that made a 4 KB request cost
+  eleven seconds).
+- **No ambient authority means CSRF has no prize**, but a browser could still be
+  used to spend a victim's rate limit. `guardApi` in `src/index.ts` requires a
+  JSON content type, which a cross-origin form or simple request cannot set
+  without a preflight this service never answers.
+
+If accounts are ever added — to save an analysis, say — this section stops being
+true, and that change should be treated as a new threat model rather than a
+feature.
 
 ## What the service holds
 

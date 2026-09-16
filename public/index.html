@@ -62,8 +62,9 @@
     <aside class="notice-wrap" aria-label="Important notice about this service">
       <p class="notice notice--standing" role="note">
         <strong>This is information, not legal advice.</strong> ClearClause explains what your
-        document says. It does not tell you what the law is, whether a clause is enforceable, or
-        what you should do. For a decision that matters, speak to a lawyer.
+        document says, what it obliges you to, and what you can ask for. It does not tell you
+        whether a clause is enforceable, and it does not decide for you. For a decision that
+        matters, speak to a lawyer — it will show you where to find one, including free legal aid.
       </p>
     </aside>
 
@@ -236,7 +237,24 @@
 
         <div class="columns">
           <div class="column column--main">
-            <h3 class="column__head" id="clauses-h">Every clause, in plain English</h3>
+            <div class="column__headrow">
+              <h3 class="column__head" id="clauses-h">Every clause, in plain English</h3>
+              <div class="filter">
+                <label for="clause-filter" class="field__label">Show</label>
+                <select id="clause-filter">
+                  <option value="all">Every clause</option>
+                  <option value="high">Needs attention only</option>
+                  <option value="high,medium">Needs attention and worth checking</option>
+                  <option value="obligations">Only clauses that oblige you to something</option>
+                </select>
+                <p
+                  class="filter__count tabular"
+                  id="filter-count"
+                  role="status"
+                  aria-live="polite"
+                ></p>
+              </div>
+            </div>
             <ol class="clauses" id="clause-list" aria-labelledby="clauses-h"></ol>
           </div>
 
@@ -248,6 +266,15 @@
               <ul class="checklist" id="obligations-list"></ul>
             </section>
 
+            <section class="card" aria-labelledby="nextsteps-h" id="nextsteps-card" hidden>
+              <h4 id="nextsteps-h">What you can do about it</h4>
+              <p class="card__lede">
+                Things you can ask for. Not what the law gives you — what is normal to raise before
+                you sign.
+              </p>
+              <ul class="nextsteps" id="nextsteps-list"></ul>
+            </section>
+
             <section class="card" aria-labelledby="questions-h" id="questions-card" hidden>
               <h4 id="questions-h">Questions worth asking first</h4>
               <ol class="questions" id="questions-list"></ol>
@@ -255,6 +282,18 @@
                 Copy the full summary
               </button>
               <p class="copy-status" id="copy-status" role="status" aria-live="polite"></p>
+            </section>
+
+            <section class="card" aria-labelledby="help-h" id="help-card" hidden>
+              <h4 id="help-h">Where to get help that is not a website</h4>
+              <p id="help-aid"></p>
+              <p>
+                <a id="help-aid-link" href="https://nalsa.gov.in" rel="noopener noreferrer"
+                  >nalsa.gov.in</a
+                >
+              </p>
+              <p id="help-professional"></p>
+              <p id="help-take"></p>
             </section>
           </aside>
         </div>

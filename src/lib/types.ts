@@ -76,6 +76,30 @@ export interface Inconsistency {
   values: InconsistentValue[];
 }
 
+/**
+ * A move available to the reader, derived deterministically.
+ * Procedural — what they can ask for — never a statement of what the law gives them.
+ */
+export interface NextStep {
+  /** Rule that produced this, e.g. "lock-in". "document-type" for whole-document steps. */
+  kind: string;
+  /** The clause that prompted it, or null for a whole-document step. */
+  clauseIndex: number | null;
+  clauseLabel: string | null;
+  step: string;
+  /** Why it is worth doing. Empty for whole-document steps. */
+  because: string;
+}
+
+/** Where a person can get help that is not this website. */
+export interface WhereToGetHelp {
+  freeLegalAid: string;
+  freeLegalAidUrl: string;
+  /** Which kind of professional handles a document of this type. */
+  professional: string;
+  takeWithYou: string;
+}
+
 /** Aggregate view of the whole document. */
 export interface DocumentReport {
   docType: DocType;
@@ -91,6 +115,10 @@ export interface DocumentReport {
   ungroundedCount: number;
   /** Terms the document contradicts itself on. Found deterministically. */
   inconsistencies: Inconsistency[];
+  /** What the reader can do about what was found. Procedural, never advice. */
+  nextSteps: NextStep[];
+  /** Where to get help that is not this website. */
+  help: WhereToGetHelp;
 }
 
 /** Result of screening input before it reaches a model. */

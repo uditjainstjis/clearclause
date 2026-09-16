@@ -46,6 +46,14 @@ const els = {
   compareCounts: $('compare-counts'),
   compareList: $('compare-list'),
   compareStats: $('compare-stats'),
+  nextstepsCard: $('nextsteps-card'),
+  nextstepsList: $('nextsteps-list'),
+  helpCard: $('help-card'),
+  helpAid: $('help-aid'),
+  helpProfessional: $('help-professional'),
+  helpTake: $('help-take'),
+  clauseFilter: $('clause-filter'),
+  filterCount: $('filter-count'),
   progress: $('progress'),
   results: $('results'),
   guardAlert: $('guard-alert'),
@@ -253,6 +261,9 @@ function renderGuard(guard) {
 function renderClause(a) {
   const node = els.tpl.content.firstElementChild.cloneNode(true);
   node.dataset.risk = a.risk;
+  // Read by the clause filter, so "only what obliges me to something" can be
+  // answered without re-deriving it from the DOM.
+  node.dataset.obligations = String(a.obligations.length > 0);
   node.id = `clause-${a.index}`;
 
   const risk = RISK[a.risk] || RISK.info;
@@ -323,6 +334,9 @@ function renderReport(report, stats) {
     }
     els.readfirst.hidden = false;
   }
+
+  renderAssistance(report);
+  applyClauseFilter();
 
   if (report.obligations.length > 0) {
     els.obligationsList.replaceChildren();
@@ -405,6 +419,78 @@ els.copyBtn.addEventListener('click', async () => {
   }
 });
 
+/**
+ * What the reader can do next, and where to get help.
+ *
+ * Both come from the report as plain data computed on the server in TypeScript,
+ * so this function only lays them out. It writes with textContent like the rest
+ * of this file.
+ */
+function renderAssistance(report) {
+  els.nextstepsList.replaceChildren();
+  for (const step of report.nextSteps ?? []) {
+    const li = document.createElement('li');
+    const what = document.createElement('p');
+    what.className = 'nextstep__what';
+    what.textContent = step.step;
+    li.append(what);
+
+    if (step.because) {
+      const why = document.createElement('p');
+      why.className = 'nextstep__why';
+      why.textContent = step.because;
+      li.append(why);
+    }
+    if (step.clauseIndex !== null) {
+      const a = document.createElement('a');
+      a.className = 'nextstep__link';
+      a.href = `#clause-${step.clauseIndex}`;
+      a.textContent = step.clauseLabel ? `See clause ${step.clauseLabel}` : 'See the clause';
+      li.append(a);
+    }
+    els.nextstepsList.append(li);
+  }
+  els.nextstepsCard.hidden = (report.nextSteps ?? []).length === 0;
+
+  const help = report.help;
+  if (help) {
+    els.helpAid.textContent = help.freeLegalAid;
+    els.helpProfessional.textContent = help.professional;
+    els.helpTake.textContent = help.takeWithYou;
+    els.helpCard.hidden = false;
+  }
+}
+
+// ---------------------------------------------------------------- navigate
+
+/**
+ * Filter the clause list.
+ *
+ * Long agreements are the ones people most need help with and the ones hardest
+ * to move around in — the brief asks for help to "understand, compare and
+ * navigate", and this is the navigate part. Filtering hides rather than removes,
+ * so anchors from "Read these first" and from the next-steps panel keep working;
+ * the count is announced politely so the change is not silent for a screen
+ * reader.
+ */
+function applyClauseFilter() {
+  const mode = els.clauseFilter.value;
+  const items = els.clauseList.querySelectorAll('.clause');
+  let shown = 0;
+  for (const item of items) {
+    const risk = item.dataset.risk;
+    const hasObligations = item.dataset.obligations === 'true';
+    const visible =
+      mode === 'all' || (mode === 'obligations' ? hasObligations : mode.split(',').includes(risk));
+    item.hidden = !visible;
+    if (visible) shown++;
+  }
+  els.filterCount.textContent =
+    shown === items.length
+      ? `Showing all ${items.length} clauses.`
+      : `Showing ${shown} of ${items.length} clauses.`;
+}
+
 // ---------------------------------------------------------------- modes
 
 /** Labels the primary button takes in each mode. */
@@ -435,6 +521,10 @@ function applyMode() {
   // answer on screen under a new question is how people misread a page.
   for (const [name, ref] of Object.entries(MODE_PANELS)) {
     if (name !== mode) els[ref].hidden = true;
+  }
+  if (mode !== 'explain') {
+    els.nextstepsCard.hidden = true;
+    els.helpCard.hidden = true;
   }
   hideError();
 }
@@ -749,6 +839,8 @@ els.form.addEventListener('submit', async (event) => {
     setBusy(false);
   }
 });
+
+els.clauseFilter.addEventListener('change', applyClauseFilter);
 
 updateCount();
 applyMode();

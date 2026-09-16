@@ -114,9 +114,24 @@ autoplays and nothing parallaxes.
 ## Known gaps
 
 - **English only.** For a tool aimed at access to justice in India this is the
-  most significant limitation in this document. The analysis prompt is
-  English-language and the interface is not localised.
-- The `<textarea>` is a plain text field, not a rich editor; very long documents
-  are awkward to navigate with a keyboard inside it.
+  most significant limitation in this document, and the one worth being precise
+  about rather than simply conceding.
+
+  The design for closing it is already settled, and grounding is the reason it
+  is not a one-line change. The `plain`, `why`, `ask` and next-step fields are
+  explanation, and can be produced in Hindi or another language safely. The
+  `quote` field cannot: it is a verbatim span of the user's own document, and
+  translating it would break the one property the whole product rests on — that
+  every claim can be checked, character for character, against the paper in the
+  reader's hand. So the shape is: explanation translates, the quote stays in the
+  document's language, `lang` is set per node so a screen reader switches voice
+  at the right boundary, and `PROMPT_VERSION` separates the cache. What is
+  missing is evaluation, not architecture: shipping a Hindi explanation whose
+  calibration nobody has measured would be worse than shipping none.
+
+- Long documents can now be **filtered** — by severity, or to only the clauses
+  that oblige you to something — which is the main navigation aid. The
+  `<textarea>` itself is still a plain text field rather than a rich editor, so
+  moving around inside the _input_ with a keyboard remains awkward.
 - Automated auditing covers the states reachable from the live site. The
   rate-limited (429) state was verified in tests but not in a browser audit.

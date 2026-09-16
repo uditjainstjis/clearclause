@@ -34,6 +34,13 @@ const VALID_DOC_TYPES: readonly DocType[] = [
 app.use('*', async (c, next) => {
   await next();
   c.res = harden(c.res);
+  // API responses carry verbatim, redacted fragments of the caller's document.
+  // Nothing in that should sit in an intermediary cache or a browser's disk
+  // cache. The SSE stream sets this itself; this covers the JSON routes, which
+  // previously set no cache directive at all.
+  if (c.req.path.startsWith('/api/')) {
+    c.res.headers.set('cache-control', 'no-store, no-cache, must-revalidate, private');
+  }
 });
 
 /**

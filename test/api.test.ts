@@ -202,7 +202,10 @@ describe('POST /api/analyze streaming', () => {
 
   it('never caches an analysis response at the edge', async () => {
     const res = await post({ text: DOC });
-    expect(res.headers.get('cache-control')).toBe('no-store');
+    // Asserted by directive rather than by exact string: the middleware adds
+    // no-cache/must-revalidate/private on top, and pinning the whole value
+    // would fail on a change that made the policy stricter.
+    expect(res.headers.get('cache-control')).toMatch(/\bno-store\b/);
   });
 
   it('reports counts in the final report that match the clauses streamed', async () => {
@@ -471,5 +474,39 @@ describe('the ask and compare routes', () => {
   it('still 404s an unknown API route', async () => {
     const res = await call('/api/nonsense', {});
     expect(res.status).toBe(404);
+  });
+});
+
+describe('API responses are never cached', () => {
+  it('sets no-store on every /api route, not only the stream', async () => {
+    // These bodies contain verbatim redacted fragments of the caller's
+    // document. Neither an intermediary nor a browser disk cache should keep
+    // them.
+    for (const [path, body] of [
+      ['/api/analyze', { text: DOC }],
+      ['/api/ask', { text: DOC, question: 'how much notice must I give?' }],
+      ['/api/compare', { a: DOC, b: DOC.replace('sixty', 'ninety') }],
+      ['/api/health', null],
+    ] as const) {
+      const res = await worker.fetch(
+        new Request(`https://clearclause.test${path}`, {
+          method: body ? 'POST' : 'GET',
+          headers: { 'content-type': 'application/json', 'sec-fetch-site': 'same-origin' },
+          ...(body ? { body: JSON.stringify(body) } : {}),
+        }),
+        stubEnv(),
+        {} as ExecutionContext,
+      );
+      expect(res.headers.get('cache-control'), path).toMatch(/no-store/);
+    }
+  });
+
+  it('still lets static assets be cached', async () => {
+    const res = await worker.fetch(
+      new Request('https://clearclause.test/'),
+      stubEnv(),
+      {} as ExecutionContext,
+    );
+    expect(res.headers.get('cache-control') ?? '').not.toMatch(/no-store/);
   });
 });

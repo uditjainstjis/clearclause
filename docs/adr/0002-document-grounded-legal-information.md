@@ -1,4 +1,4 @@
-# ADR-0002: Explain the document, never the law
+# ADR-0002: Document-grounded legal information, not legal advice
 
 **Status:** accepted · 2026-09-14
 
@@ -33,9 +33,16 @@ This is enforced in four places rather than promised in one:
    cannot fail to render.
 4. A test that fails if the disclaimer is removed.
 
-The product is narrower and less impressive in a demonstration. In exchange,
-every claim it makes is checkable by the user against a document they already
-hold — which is the only verification an unrepresented person actually has.
+This is not a reduction in scope, it is where the scope becomes defensible.
+Every claim the product makes is checkable by the reader against a document they
+already hold — which is the only verification an unrepresented person actually
+has. A tool that told them what the law is would be asking for trust they have
+no way to test, from a model that can be confidently wrong, on the decision
+where being wrong costs the most.
+
+So the product covers the brief's full first half — legal _information_ and
+basic assistance, made accessible — and declines only the half the brief itself
+says not to replace.
 
 The vocabulary follows: the headline number is "needs your attention", not a
 "legal risk score", and clause severities are phrased as attention levels.

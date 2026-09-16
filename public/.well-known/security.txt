@@ -1,0 +1,9 @@
+# RFC 9116. If you have found a vulnerability in ClearClause, this is where to
+# send it. Please do not include a real contract in your report — see SECURITY.md.
+
+Contact: https://github.com/uditjainstjis/clearclause/security/advisories/new
+Expires: 2027-09-17T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://clearclause.seriouss.workers.dev/.well-known/security.txt
+Policy: https://github.com/uditjainstjis/clearclause/blob/main/SECURITY.md
+Acknowledgments: https://github.com/uditjainstjis/clearclause/blob/main/SECURITY.md#acknowledgements

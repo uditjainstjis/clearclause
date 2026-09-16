@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { isVerhoeffValid, redactPII } from '../src/lib/redact';
+import { normalizeDocument } from '../src/lib/segment';
+import { MAX_INPUT_CHARS } from '../src/lib/pipeline';
 
 describe('isVerhoeffValid', () => {
   // 234123412346 is the canonical valid example used in UIDAI documentation.
@@ -78,5 +80,75 @@ describe('redactPII', () => {
   it('leaves clause numbering and dates alone', () => {
     const clause = '14.2 On 1st August 2026 the term of eleven (11) months commences.';
     expect(redactPII(clause).count).toBe(0);
+  });
+});
+
+/**
+ * Regression test for an unauthenticated CPU-exhaustion vulnerability.
+ *
+ * The account-number rule previously used three unbounded whitespace
+ * quantifiers separated by two optional groups. Over a long whitespace run the
+ * engine enumerates every partition of that run across the three, re-testing
+ * the digit class each time - polynomial backtracking, measured at roughly
+ * cubic.
+ *
+ * It was reachable without authentication on /api/analyze, /api/ask and
+ * /api/compare. Measured 2026-09-17 before the fix: "Account" followed by 4,000
+ * vertical tabs and a trailing sentence - a 4 KB body, about 3% of the allowed
+ * input size - took 11.0 seconds of CPU. After the fix, 0 ms.
+ *
+ * Normalisation did not save it, and that was the root cause rather than the
+ * regex alone: normalizeDocument collapsed only space, tab and NBSP, while the
+ * matcher's whitespace class also covers vertical tab, form feed, U+2028 and
+ * U+2029. Those survived normalisation and reached the matcher. Both halves are
+ * fixed, and this test fails if either regresses.
+ */
+describe('redactPII is not vulnerable to catastrophic backtracking', () => {
+  const EXOTIC_WHITESPACE: readonly (readonly [string, string])[] = [
+    ['vertical tab', String.fromCharCode(0x0b)],
+    ['form feed', String.fromCharCode(0x0c)],
+    ['line separator', String.fromCharCode(0x2028)],
+    ['paragraph separator', String.fromCharCode(0x2029)],
+  ];
+
+  for (const [name, char] of EXOTIC_WHITESPACE) {
+    it(`survives a long run of ${name} after an account keyword`, () => {
+      const hostile = `Account${char.repeat(4000)}The Tenant shall pay rent of Rs. 38,000.`;
+      const started = Date.now();
+      redactPII(normalizeDocument(hostile));
+      // Before the fix this took about 11,000ms. A generous ceiling still fails
+      // loudly if the backtracking ever returns.
+      expect(Date.now() - started).toBeLessThan(1000);
+    });
+  }
+
+  it('survives the same attack at the full input limit', () => {
+    const vt = String.fromCharCode(0x0b);
+    const hostile = `A/c${vt.repeat(MAX_INPUT_CHARS - 40)}payable 123456789012 now`;
+    const started = Date.now();
+    redactPII(normalizeDocument(hostile));
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it('still redacts every real account-number spelling it used to', () => {
+    // The fix must not trade correctness for speed.
+    for (const input of [
+      'Account No. 123456789012 held',
+      'A/c No 98765432101234 held',
+      'Account Number: 123456789 held',
+      'account no.123456789012 held',
+      'A/c  No.  123456789012 held',
+    ]) {
+      expect(redactPII(input).text, input).toContain('[REDACTED:ACCOUNT]');
+    }
+  });
+
+  it('normalises every whitespace character its matchers treat as whitespace', () => {
+    // The mismatch between what was normalised and what the matcher accepted is
+    // what made the attack possible; this pins the two together.
+    for (const [, char] of EXOTIC_WHITESPACE) {
+      const out = normalizeDocument(`Account${char.repeat(50)}No. 123456789012`);
+      expect(out).not.toContain(char);
+    }
   });
 });

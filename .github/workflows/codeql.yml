@@ -1,0 +1,58 @@
+# Static analysis, because `npm audit` is not it.
+#
+# npm audit is an advisory-database lookup: it tells you whether a dependency
+# someone else already reported is in your tree. It says nothing about the code
+# in this repository.
+#
+# That distinction is not theoretical here. A polynomial-backtracking regex in
+# src/lib/redact.ts was reachable unauthenticated on all three POST routes, and
+# a 4 KB request body burned eleven seconds of CPU. `npm audit` reported zero
+# vulnerabilities throughout, and was right to — the flaw was ours. CodeQL's
+# js/polynomial-redos query is the check that finds that class, so it runs on
+# every push and on a weekly schedule to catch newly published queries against
+# unchanged code.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Mondays, 04:17 UTC. Off the hour on purpose: scheduled runs cluster there.
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyse
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      # The only elevated permission in this repository, and the narrowest that
+      # lets results reach the Security tab.
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Initialise CodeQL
+        uses: github/codeql-action/init@faaca9a8f6edddba5725ffe5adefdab6669a2eca # v3
+        with:
+          languages: javascript-typescript
+          # security-extended adds the ReDoS and injection queries that the
+          # default suite leaves out. They are the ones that matter for a
+          # service whose whole input is untrusted text.
+          queries: security-extended
+
+      - name: Analyse
+        uses: github/codeql-action/analyze@faaca9a8f6edddba5725ffe5adefdab6669a2eca # v3
+        with:
+          category: /language:javascript-typescript

@@ -1,0 +1,25 @@
+# Block a vulnerable or badly-licensed dependency at the pull request, before it
+# is ever in the tree. `npm audit` in CI catches what is already merged; this
+# catches it one step earlier, which is the cheaper place to catch it.
+name: Dependency review
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    name: Review dependency changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
+        with:
+          fail-on-severity: high
+          # Copyleft licences would be a problem for a project offered under
+          # MIT; better to hear about it at the PR than at release.
+          deny-licenses: AGPL-3.0, GPL-3.0

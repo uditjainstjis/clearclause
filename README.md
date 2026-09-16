@@ -18,9 +18,22 @@ tenancy agreements, offer letters, loan papers — without reading them, because
 reading them does not help. The words are impenetrable, and the cost of a lawyer
 is out of proportion to an ₹38,000-a-month lease.
 
-The gap is not access to law. It is access to _understanding the document in
-front of you_. ClearClause closes that gap and stops precisely there: it
-explains what your document says, and never tells you what the law is.
+ClearClause gives them **legal information and basic legal assistance about the
+document in front of them**: what it obliges them to, what it will cost, what
+changed between drafts, what it does and does not say, what to ask before
+signing, and where to get help that is not a website.
+
+It stops short of **legal advice**. It will not tell you whether a clause is
+enforceable, and it will not decide for you. That line is the brief's own —
+_"provide information and assistance, rather than replace professional legal
+advice"_ — and here it is enforced in code rather than promised in prose: the
+system prompt forbids stating the law, and a test fails the build if the
+disclaimer is ever removed.
+
+The distinction matters, because the two halves are routinely confused.
+Withholding legal _advice_ protects the reader. Withholding legal _information_
+is the status quo that put them in this position — holding a document they are
+about to be bound by and cannot read.
 
 ## What it does
 
@@ -35,6 +48,9 @@ explains what your document says, and never tells you what the law is.
 | **Ask a question**            | Answered only from your document, always with the sentence it came from            |
 | **Compare two versions**      | What changed between drafts, and which way each change cuts for you                |
 | **Contradiction check**       | Terms the document states two different ways — found without a model               |
+| **What you can do about it**  | Concrete things to ask for, derived from the clauses that were flagged             |
+| **Where to get help**         | Free legal aid, and which kind of professional handles your document type          |
+| **Navigate a long document**  | Filter to what needs attention, or to only what obliges you to something           |
 
 Three modes, one page. The mode selector is a real radio group, so it is
 keyboard- and screen-reader-navigable without a line of custom JavaScript.
@@ -165,11 +181,13 @@ The brief's own use cases, and where each is implemented:
 | Highlighting important clauses, obligations, risks        | severity + `readFirst()` + `collectObligations()` — `src/lib/risk.ts`                                |
 | …**or inconsistencies**                                   | `findInconsistencies()` — `src/lib/consistency.ts`, no model involved                                |
 | **Answering questions based on provided legal documents** | `POST /api/ask` — retrieval in `src/lib/retrieve.ts`, grounding in `src/lib/ask.ts`                  |
-| Helping users understand options and next steps           | `ask` field per clause, "Questions worth asking first"                                               |
+| Helping users understand options and next steps           | `buildNextSteps()` + the "where to get help" panel — `src/lib/nextsteps.ts`                          |
 | Generating summaries, checklists, actionable outputs      | obligations checklist, question sheet, copy-as-Markdown                                              |
-| Helping users prepare for a legal professional            | the question sheet is designed to be handed over                                                     |
+| Helping users prepare for a legal professional            | the question sheet, printable and designed to be handed over                                         |
+| **Navigating** a long document — the brief's third verb   | filter the clause list by severity, or to only what obliges you — `applyClauseFilter()`              |
 
-All seven are implemented. Three are worth a note.
+All seven are implemented, and the brief's three headline verbs — understand,
+compare, navigate — each have a feature behind them. Four are worth a note.
 
 **Comparing** splits the problem in two and gives the model only the half it is
 good at. Which clause in the new draft corresponds to which in the old one is
@@ -186,6 +204,18 @@ say" is presented as a correct answer rather than a failure. Asked whether a
 lock-in clause is enforceable, it declines — that is a question about the law,
 and this product does not answer those.
 
+**Options and next steps** are the assistance half, and the half easiest to get
+wrong in either direction. Overreach and you are telling someone what the law
+entitles them to; skip it and you have handed them a list of problems and no
+handle. `src/lib/nextsteps.ts` stays strictly procedural — ask for a cap, ask
+for symmetry, ask what happens if — derived in TypeScript from each clause's
+severity and its own words, so the suggestions are reproducible and none of them
+came from a model. `test/nextsteps.test.ts` fails the build if any step ever
+tells the reader what they are _entitled_ to rather than what they can _ask
+for_. The analysis then ends by pointing away from itself: free legal aid
+through NALSA and the District Legal Services Authorities, and the kind of
+professional who handles that document type.
+
 **Inconsistencies** are found deterministically. A contract that sets thirty
 days' notice in one clause and ninety in another is the failure a reader is
 least equipped to catch, and it needs no model: `src/lib/consistency.ts`
@@ -196,11 +226,73 @@ same; so are "3% per month" and "36% per annum".
 The brief's constraint — _"provide information and assistance, rather than
 replace professional legal advice"_ — is enforced in three places, not just
 promised: a standing disclaimer in the markup outside any conditional region;
-explicit prohibitions in the system prompt against stating what the law is,
-citing any Act or case, or telling the reader what to do; and a test that fails
-if the disclaimer is removed (`test/a11y.test.ts`).
+explicit prohibitions in the system prompt against stating what the law is or
+citing any Act or case; and a test that fails if the disclaimer is removed
+(`test/a11y.test.ts`). `test/nextsteps.test.ts` holds the same line on the
+assistance side: it fails if any suggested step ever tells the reader what they
+are _entitled_ to rather than what they can _ask for_.
+
+### What "Access" actually means here
+
+The theme is Legal Assistance **& Access**, so it is worth being concrete about
+who this reaches that the status quo does not.
+
+An advocate's read of a tenancy agreement costs a meaningful fraction of a
+month's rent on that same tenancy, and takes days to arrange. That is the
+barrier — not the absence of law, but the cost of a first opinion on a document
+someone is being asked to sign this week. ClearClause returns the first clause
+in about a second and the whole document in under eight, with no sign-up, no
+account, and nothing retained but redacted clause fragments for seven days.
+
+It is deployed on Cloudflare's free tier with inference through a Workers AI
+binding, so the cost of one more reader is effectively zero — which is the
+property that decides whether a thing like this can stay free at the scale the
+problem has. And it ends by pointing away from itself: every analysis carries a
+panel naming free legal aid through NALSA and the District Legal Services
+Authorities, and the kind of professional who handles that document type, with
+the question sheet formatted to be handed over on paper.
+
+Three limits on access are open and worth naming: it is English-only, it needs
+plain text rather than the PDF most contracts arrive as, and its severity
+calibration assumes Indian contracting norms. The first is the one that matters
+most, and `docs/ACCESSIBILITY.md` sets out the design for closing it — the
+explanation translates, the verified quote stays in the document's own language,
+so grounding survives translation.
 
 ### Security
+
+A real vulnerability was found in this codebase and fixed, and it is worth
+leading with because it is the difference between a documented threat model and
+a working one.
+
+`src/lib/redact.ts` matched account numbers with three unbounded whitespace
+quantifiers separated by two optional groups. Over a long whitespace run the
+engine enumerates every partition of that run across the three — polynomial
+backtracking, measured at roughly cubic. It was reachable unauthenticated on all
+three POST routes, and `/api/compare` takes two documents, so it doubled.
+**Measured: "Account" followed by 4,000 vertical tabs and a sentence — a 4 KB
+body, about 3% of the allowed input — burned 11.0 seconds of CPU. After the fix,
+0 ms.**
+
+`npm audit` reported zero vulnerabilities throughout, and was right to: the flaw
+was ours, not a dependency's. That is exactly the gap between advisory-database
+lookup and static analysis, so **CodeQL now runs on every push** with
+`security-extended`, whose `js/polynomial-redos` query is the check that finds
+this class.
+
+The root cause was not the regex alone. `normalizeDocument` collapsed only
+space, tab and NBSP, while the matcher's `\s` also covers vertical tab, form
+feed, U+2028 and U+2029 — so those survived normalisation and reached a matcher
+written for a wider class. Both halves are fixed, and `test/redact.test.ts` pins
+the whole character class against regression.
+
+The security program around it: CodeQL and `npm audit` gate the build,
+`dependency-review-action` blocks a vulnerable dependency at the pull request,
+Dependabot keeps the tree current so the audit gate stays sustainable, every
+GitHub Action is pinned to a commit SHA rather than a mutable tag, workflows run
+with `permissions: contents: read` and only CodeQL asks for more, and
+[`/.well-known/security.txt`](public/.well-known/security.txt) points at a
+private disclosure channel with a stated response SLA and a safe-harbour clause.
 
 | Control                                                       | Where                                              |
 | ------------------------------------------------------------- | -------------------------------------------------- |
@@ -236,7 +328,7 @@ Full threat model: [SECURITY.md](SECURITY.md).
 
 ### Testing
 
-**309 tests, all passing. 96% statements, 86% branches, 99% functions.**
+**330 tests, all passing. 96% statements, 86% branches, 99% functions.**
 
 Nearly all of them run **inside workerd** via `@cloudflare/vitest-pool-workers`
 — the same runtime the Worker deploys to — so Cache API, WebCrypto, streams,
@@ -253,18 +345,27 @@ and every Cloudflare variable unset.
 A second project runs in jsdom for the one job workerd cannot do — running
 axe-core over a real DOM. See Accessibility below.
 
-| Suite               | Covers                                                                                      |
-| ------------------- | ------------------------------------------------------------------------------------------- |
-| `segment.test.ts`   | normalisation, marker families, sub-list grouping, preamble, offsets, oversized clauses     |
-| `grounding.test.ts` | exact match, tolerated variation, **paraphrase rejection**, elision order, span offsets     |
-| `redact.test.ts`    | Verhoeff validity, every rule, and false-positive resistance on ordinary contract figures   |
-| `guard.test.ts`     | all 7 injection classes, fence integrity, finding caps                                      |
-| `risk.test.ts`      | scoring, **length-independence**, ungrounded exclusion, dedupe, ordering                    |
-| `ai.test.ts`        | model-output parsing and the demotion of ungrounded claims                                  |
-| `cache.test.ts`     | key determinism, boundary-collision resistance, round-trip                                  |
-| `pipeline.test.ts`  | event order, concurrency, clause caps, screening order                                      |
-| `api.test.ts`       | routes, validation, headers, streaming, rate limiting, **fallback and total-failure paths** |
-| `a11y.test.ts`      | landmarks, labels, ARIA reference integrity, focus order, CSP-compatible markup             |
+| Suite                 | Covers                                                                                      |
+| --------------------- | ------------------------------------------------------------------------------------------- |
+| `segment.test.ts`     | normalisation, marker families, sub-list grouping, preamble, offsets, oversized clauses     |
+| `grounding.test.ts`   | exact match, tolerated variation, **paraphrase rejection**, elision order, span offsets     |
+| `redact.test.ts`      | Verhoeff validity, every rule, false-positive resistance, **and ReDoS regression**          |
+| `guard.test.ts`       | all 7 injection classes, fence integrity, finding caps                                      |
+| `risk.test.ts`        | scoring, **length-independence**, ungrounded exclusion, dedupe, ordering                    |
+| `ai.test.ts`          | model-output parsing and the demotion of ungrounded claims                                  |
+| `cache.test.ts`       | key determinism, boundary-collision resistance, round-trip                                  |
+| `pipeline.test.ts`    | event order, concurrency, clause caps, screening order                                      |
+| `api.test.ts`         | routes, validation, headers, streaming, rate limiting, **fallback and total-failure paths** |
+| `a11y.test.ts`        | landmarks, labels, ARIA reference integrity, focus order, CSP-compatible markup             |
+| `retrieve.test.ts`    | stemmer self-consistency, BM25 ranking, **everyday-word to term-of-art expansion**          |
+| `align.test.ts`       | cosine similarity, mutual-best pairing, **survives renumbering**, refuses weak matches      |
+| `ask.test.ts`         | question validation, **grounding enforcement**, quote salvage, fallback on unverified cites |
+| `compare.test.ts`     | the verdict arithmetic, ungrounded claims excluded from it, difference cap, labels          |
+| `consistency.test.ts` | contradiction detection, unit equivalence (60 days ≡ 2 months), silence on consistent docs  |
+| `nextsteps.test.ts`   | step derivation, severity gating, **and that no step ever states an entitlement**           |
+| `prompts.test.ts`     | fencing of every untrusted input, schema shapes, instruction hierarchy                      |
+| `axe.dom.test.ts`     | the real axe engine over the shipped markup, both themes, **with a negative control**       |
+| `assets.dom.test.ts`  | font content-addressing, preload/stylesheet agreement, hash matches bytes                   |
 
 ### Accessibility
 
@@ -330,11 +431,17 @@ No `.env` file, no API key, nothing to configure.
 Stated plainly, because a tool in this domain that oversells itself is worse
 than no tool.
 
-- **It is not legal advice, and it does not know the law.** It explains the
-  document in front of it. It cannot tell you whether a clause is enforceable.
-- **Plain text only.** PDF and DOCX must be pasted as text. Extraction is a
-  meaningful engineering problem and doing it badly would silently corrupt the
-  grounding guarantee.
+- **It gives legal information, not legal advice.** It explains the document in
+  front of it and what you can ask for. It will not tell you whether a clause is
+  enforceable, or make the decision for you — for that, see the "where to get
+  help" panel it produces, which points at free legal aid and at the kind of
+  professional who handles your document type.
+- **Plain text in, for now.** PDF and DOCX must be pasted as text. This is the
+  intake barrier that matters, because a PDF is the form most contracts actually
+  arrive in — but extraction that silently drops or reorders a line would
+  corrupt the grounding guarantee without anyone noticing, and a wrong quote is
+  worse than a missing feature. Client-side extraction, with an explicit "check
+  this against your PDF" prompt, is the shape that keeps both.
 - **Comparison assumes two versions of one agreement.** Alignment is mutual-best
   and refuses weak matches, so comparing two unrelated documents correctly
   produces a long list of one-sided clauses rather than invented correspondences
@@ -346,8 +453,12 @@ than no tool.
   appear nowhere in the document, and that the table does not bridge, will be
   answered "not addressed" even where a human would connect the two. Measured on
   the shipped rental sample, that is roughly one question in ten.
-- **India-first.** The calibration assumes Indian contracting norms. The
-  severity of a term elsewhere may differ.
+- **India-first, and English-only.** Calibration assumes Indian contracting
+  norms, and the explanation is produced in English. The design for translating
+  it is worked out in `docs/ACCESSIBILITY.md` — the explanation translates, the
+  verified quote stays in the document's own language so grounding survives —
+  and what is missing is measured calibration in a second language, not
+  architecture.
 - **The model can still be wrong.** Grounding proves a quote is real; it does
   not prove the reasoning about it is sound. The interface is built to send you
   to the clause itself, which is the only real safeguard.

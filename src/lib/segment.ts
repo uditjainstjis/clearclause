@@ -21,7 +21,13 @@ export function normalizeDocument(raw: string): string {
       // Re-join words broken across a line by PDF hyphenation ("termi-\nnation").
       .replace(/([a-z])-\n([a-z])/g, '$1$2')
       // Collapse horizontal whitespace runs, but never touch line structure.
-      .replace(/[ \t\u00a0]+/g, ' ')
+      // Every whitespace character except newline, not just space/tab/NBSP.
+      // Downstream rules are written against `\s`, which matches more than the
+      // old class did — vertical tab, form feed, U+2028, U+2029 — and a run of
+      // those reaching a `\s`-based matcher is what made the account-number
+      // rule in redact.ts backtrack catastrophically. Normalise exactly what
+      // the matchers treat as whitespace, so the two cannot disagree again.
+      .replace(/[^\S\n]+/g, ' ')
       .replace(/ *\n */g, '\n')
       .replace(/\n{3,}/g, '\n\n')
       .trim()

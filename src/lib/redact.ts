@@ -62,7 +62,27 @@ const RULES: RedactionRule[] = [
   { kind: 'PAN', re: /\b[A-Z]{5}\d{4}[A-Z]\b/g },
   { kind: 'IFSC', re: /\b[A-Z]{4}0[A-Z0-9]{6}\b/g },
   { kind: 'PHONE', re: /(?:\+91[\s-]?)?\b[6-9]\d{9}\b/g },
-  { kind: 'ACCOUNT', re: /\b(?:A\/c|Account)\s*(?:No\.?|Number)?\s*:?\s*(\d{9,18})\b/gi },
+  // Bounded `[ \t]{0,4}` rather than `\s*`, and deliberately not `\s`.
+  //
+  // The previous form had three unbounded `\s*` separated by two optional
+  // groups. Over a long whitespace run the engine enumerates every way of
+  // splitting that run across the three quantifiers, re-testing `\d{9,18}`
+  // each time — polynomial backtracking, measured at roughly cubic.
+  //
+  // It was reachable unauthenticated on all three POST routes. Measured
+  // 2026-09-17: "Account" followed by 4,000 vertical-tab characters and a
+  // trailing sentence — a 4 KB body, about 3% of MAX_INPUT_CHARS — burned
+  // 11.0s of CPU here, against 0ms for this form. /api/compare takes two
+  // documents, so it doubled.
+  //
+  // Normalisation alone did not save it: normalizeDocument collapsed only
+  // [ \t\u00a0], while `\s` also matches VT, FF, U+2028 and U+2029, which
+  // survived. That mismatch between what is normalised and what is matched is
+  // the actual root cause, and segment.ts now closes the other half of it.
+  {
+    kind: 'ACCOUNT',
+    re: /\b(?:A\/c|Account)[ \t]{0,4}(?:No\.?|Number)?[ \t]{0,4}:?[ \t]{0,4}(\d{9,18})\b/gi,
+  },
 ];
 
 export interface RedactionResult {

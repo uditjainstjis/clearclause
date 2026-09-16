@@ -1,0 +1,22 @@
+# Keeping the tree current is part of keeping `npm audit` meaningful: a gate
+# that fails the build is only sustainable if upgrades arrive steadily rather
+# than as one large overdue jump.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # One PR for the routine bumps, so the security ones stand out.
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+
+  # The workflows pin actions to commit SHAs, which is safe but goes stale
+  # silently. Dependabot re-pins them, so the pinning does not rot.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

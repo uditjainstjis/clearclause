@@ -1,4 +1,5 @@
 import { findInconsistencies } from './consistency';
+import { buildNextSteps, whereToGetHelp } from './nextsteps';
 import type {
   Clause,
   ClauseAnalysis,
@@ -143,5 +144,10 @@ export function buildReport(
     // a property of what the document says, and must not depend on whether a
     // model happened to notice it.
     inconsistencies: findInconsistencies(clauses),
+    // The brief asks for help with "options and potential next steps". These are
+    // derived in TypeScript from severity and clause text, so they are
+    // reproducible and contain nothing a model invented.
+    nextSteps: buildNextSteps(analyses, docType),
+    help: whereToGetHelp(docType),
   };
 }
