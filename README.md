@@ -345,7 +345,7 @@ than no tool.
   rental, employment and loan agreements. A question phrased in words that
   appear nowhere in the document, and that the table does not bridge, will be
   answered "not addressed" even where a human would connect the two. Measured on
-  the shipped rental sample, that is roughly one question in five.
+  the shipped rental sample, that is roughly one question in ten.
 - **India-first.** The calibration assumes Indian contracting norms. The
   severity of a term elsewhere may differ.
 - **The model can still be wrong.** Grounding proves a quote is real; it does

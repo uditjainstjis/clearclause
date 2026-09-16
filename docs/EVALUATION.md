@@ -158,10 +158,14 @@ alteration. The document is never rewritten, so quotes stay verbatim.
 | How much can the **rent** go up on renewal?    | not addressed | clause 5, quoted  |
 | Can I install an **air conditioner**?          | not addressed | clause 10, quoted |
 
-**What still misses.** Roughly one question in five. The residue is lexical: a
-question whose words appear nowhere in the document and that the synonym table
-does not bridge. The failure mode is a refusal, not a wrong answer, which is the
-right way for this to fail.
+**What still misses.** Roughly one question in ten, and it varies run to run —
+the residue is lexical, so a question whose words appear nowhere in the document
+and that the synonym table does not bridge falls through. The failure mode is
+always a refusal, never a wrong answer, which is the right way for this to fail.
+
+The refusal set includes the boundary that matters most. Asked _"is this lock-in
+clause enforceable under Indian law?"_ the service declines: that is a question
+about the law, and this product answers questions about a document.
 
 ## 6. Comparison
 
