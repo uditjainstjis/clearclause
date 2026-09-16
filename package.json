@@ -21,7 +21,7 @@
     "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.20.3",
-    "@vitest/coverage-istanbul": "^4.1.11",
+    "@vitest/coverage-istanbul": "^5.0.0",
     "axe-core": "^4.13.0",
     "eslint": "^10.10.0",
     "jsdom": "^30.0.1",
